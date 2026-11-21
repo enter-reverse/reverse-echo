@@ -45,7 +45,7 @@ const go = (f, options = {}) => tick({ api: f.api, options: { dryRun: false, now
 test("a fresh website claim and a TRIAL message each get their reply once, and are labelled", async () => {
   const f = fake({
     open: [conv(1, INBOX.waCx, "glory santosh"), conv(2, INBOX.instagram, "🍀"), conv(3, INBOX.waCx, "Tim")],
-    threads: { 1: [msg(11, 0, CLAIM, 40)], 2: [msg(21, 0, "TRIAL", 20)], 3: [msg(31, 0, "what time do you open?", 20)] },
+    threads: { 1: [msg(11, 0, CLAIM, 120)], 2: [msg(21, 0, "TRIAL", 90)], 3: [msg(31, 0, "what time do you open?", 90)] },
   });
   const s = await go(f);
   assert.deepEqual(f.sent.map((x) => x.cid), [1, 2]);
@@ -59,10 +59,10 @@ test("a fresh website claim and a TRIAL message each get their reply once, and a
 
 test("no auto-reply where we've already written, on the store's WhatsApp, to stale messages, or in dry run", async () => {
   const threads = {
-    1: [msg(11, 0, CLAIM, 600), msg(12, 1, "Hi!", 500), msg(13, 0, "trial", 20)], // we've written here
-    2: [msg(21, 0, CLAIM, 20)], // Joo Chiat's own WhatsApp
+    1: [msg(11, 0, CLAIM, 600), msg(12, 1, "Hi!", 500), msg(13, 0, "trial", 120)], // we've written here
+    2: [msg(21, 0, CLAIM, 120)], // Joo Chiat's own WhatsApp
     3: [msg(31, 0, CLAIM, 3 * 3600)], // hours old: a person decides
-    4: [msg(41, 0, CLAIM, 20)], // already replied per Chatwoot
+    4: [msg(41, 0, CLAIM, 120)], // already replied per Chatwoot
   };
   const f = fake({
     open: [conv(1, INBOX.waCx, "A"), conv(2, INBOX.waJooChiat, "B"), conv(3, INBOX.waCx, "C"), conv(4, INBOX.waCx, "D", { first_reply_created_at: NOW - 10 })],
@@ -70,16 +70,36 @@ test("no auto-reply where we've already written, on the store's WhatsApp, to sta
   });
   await go(f);
   assert.deepEqual(f.sent, []);
-  const g = fake({ open: [conv(5, INBOX.waCx, "Eve")], threads: { 5: [msg(51, 0, CLAIM, 20)] } });
+  const g = fake({ open: [conv(5, INBOX.waCx, "Eve")], threads: { 5: [msg(51, 0, CLAIM, 120)] } });
   await tick({ api: g.api, options: { now: NOW }, log: () => {} }); // dryRun defaults to true
   assert.deepEqual(g.sent, []);
 });
 
 test("a Duo claim gets the Duo reply and is kept out of the $100 follow-up", async () => {
-  const f = fake({ open: [conv(1, INBOX.waCx, "Sam")], threads: { 1: [msg(11, 0, "Hi Zoey! We'd like to claim our $299 off HBOT for two, $299 for our first month.", 20)] } });
+  const f = fake({ open: [conv(1, INBOX.waCx, "Sam")], threads: { 1: [msg(11, 0, "Hi Zoey! We'd like to claim our $299 off HBOT for two, $299 for our first month.", 120)] } });
   await go(f);
   assert.equal(f.sent[0].content, tpl("duo", "Sam"));
   assert.deepEqual(f.labels[1], ["claim", "duo"]);
+});
+
+test("it gives the CX chat's own watcher the first turn, and looks again right before sending", async () => {
+  // Under 75 seconds old: wait.
+  const young = fake({ open: [conv(1, INBOX.waCx, "Amy")], threads: { 1: [msg(11, 0, CLAIM, 40)] } });
+  await go(young);
+  assert.deepEqual(young.sent, []);
+  await tick({ api: young.api, options: { dryRun: false, now: NOW + 60 }, log: () => {} }); // a minute later
+  assert.equal(young.sent.length, 1);
+
+  // A reply lands between this pass reading the chat and sending: don't send a second one.
+  const raced = fake({ open: [conv(2, INBOX.waCx, "Bo")], threads: { 2: [msg(21, 0, CLAIM, 120)] } });
+  let reads = 0;
+  const read = raced.api.messages;
+  raced.api.messages = async (cid) => {
+    if (++reads === 2) return [...(await read(cid)), msg(22, 1, "Hi Bo, you're in!", 1)];
+    return read(cid);
+  };
+  await go(raced);
+  assert.deepEqual(raced.sent, []);
 });
 
 const H = 3600;
@@ -130,7 +150,7 @@ test("the Worker stays in dry run unless told otherwise, and talks to Chatwoot t
     const body = u.pathname.endsWith("/conversations") && u.searchParams.get("status") === "open"
       ? { data: { payload: [{ id: 5, inbox_id: INBOX.waCx, last_activity_at: Math.floor(Date.now() / 1000), meta: { sender: { name: "amy" } } }] } }
       : u.pathname.endsWith("/conversations") ? { data: { payload: [] } }
-      : u.pathname.endsWith("/messages") && init.method === "GET" ? { payload: [{ id: 1, message_type: 0, content: CLAIM, created_at: Math.floor(Date.now() / 1000) - 5 }, { id: 2, message_type: 2, content: "activity", created_at: 1 }] }
+      : u.pathname.endsWith("/messages") && init.method === "GET" ? { payload: [{ id: 1, message_type: 0, content: CLAIM, created_at: Math.floor(Date.now() / 1000) - 120 }, { id: 2, message_type: 2, content: "activity", created_at: 1 }] }
       : u.pathname.endsWith("/labels") && init.method === "GET" ? { payload: ["vip"] }
       : { id: 77 };
     return new Response(JSON.stringify(body), { status: 200 });

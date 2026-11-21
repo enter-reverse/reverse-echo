@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { containsKeyword, matchRule, validateRules } from "../src/match.js";
+import { containsKeyword, isKeyword, matchRule, validateRules } from "../src/match.js";
 import { runOnce, pickReply, mask, sentMarker } from "../src/engine.js";
 import { InstagramError, classify, createClient } from "../src/instagram.js";
 
@@ -16,6 +16,19 @@ test("keyword matches as a whole word, any case, punctuation or emoji", () => {
   for (const t of ["trials", "trialling", "entrial", "trail", "", "love this", null]) {
     assert.ok(!containsKeyword(t, "trial"), String(t));
   }
+});
+
+test("by default only a comment that is just the keyword matches; sentences don't", () => {
+  for (const t of ["TRIAL", "trial", "Trial", "Trial!!", "  trial  ", "trial 🙏", "TRIAL🔥🔥", "#trial", "trial.", "Tríal", "\"trial\""]) {
+    assert.equal(matchRule(t, rules)?.name, "trial", t);
+  }
+  for (const t of ["trial please", "can I get the trial?", "did my trial, loved it", "free trial?", "trial trial", "@friend trial", "trials", "trail", "", null]) {
+    assert.equal(matchRule(t, rules), null, String(t));
+  }
+  assert.ok(isKeyword("Free Trial!", "free trial"), "a two-word keyword still has to be the whole comment");
+  const loose = [{ ...rules[0], match: "contains" }];
+  assert.equal(matchRule("can I get the trial?", loose)?.name, "trial");
+  assert.throws(() => validateRules({ rules: [{ ...rules[0], match: "fuzzy" }] }), /"match"/);
 });
 
 test("the shipped rules.json is valid and TRIAL maps to the trial rule", () => {
@@ -92,7 +105,7 @@ test("running twice in a row sends nothing the second time", async () => {
 
 test("our own comments, comments past the 7-day window and comments before go-live are skipped", async () => {
   const { api, sent } = fakeApi({
-    comments: { m1: [comment("c1", "enter.reverse", "Comment TRIAL to try"), comment("c2", "old", "trial", 24 * 7), comment("c3", "prelaunch", "trial", 5), comment("c4", "new", "trial", 1)] },
+    comments: { m1: [comment("c1", "enter.reverse", "TRIAL"), comment("c2", "old", "trial", 24 * 7), comment("c3", "prelaunch", "trial", 5), comment("c4", "new", "trial", 1)] },
   });
   const s = await run(api, { ignoreBefore: new Date(NOW - 2 * 3600e3) });
   assert.deepEqual(sent.dms.map((d) => d.commentId), ["c4"]);
@@ -136,7 +149,7 @@ test("a rejected token stops the whole run", async () => {
 
 test("the public reply is retried once; someone who comments twice gets one DM", async () => {
   const { api, sent } = fakeApi({
-    comments: { m1: [comment("c1", "amy", "TRIAL"), comment("c2", "amy", "trial pls")] },
+    comments: { m1: [comment("c1", "amy", "TRIAL"), comment("c2", "amy", "trial!!")] },
     failReply: { c1: [new InstagramError("blip", { status: 500, kind: "transient" })] },
   });
   await run(api);

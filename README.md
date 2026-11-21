@@ -23,7 +23,8 @@ Everything it says lives in [`rules.json`](rules.json). Each rule is one keyword
 }
 ```
 
-- `keywords` match as whole words, in any case, with any punctuation or emoji around them. "TRIAL", "trial!!" and "can I get the trial? 🙏" match; "trials" does not.
+- `keywords` match only when the comment is the keyword and nothing else, in any case, with any punctuation or emoji around it. "TRIAL", "trial", "Trial!!" and "trial 🙏" match. "trial please" and "can I get the trial?" do not, so people using the word in a sentence aren't messaged.
+- Add `"match": "contains"` to a rule to match the keyword anywhere in a sentence instead.
 - `publicReplies` are rotated so the same line isn't posted under every comment.
 - To add a keyword (say, FLOAT), copy the block, change the five fields, and commit. Rules are checked in order and the first match wins.
 - `npm run check` validates the file. A broken edit stops the run before anything is sent.
@@ -54,7 +55,7 @@ Logs are public because the repo is public, so usernames are masked (`@ab…`) a
 ## Run it
 
 ```sh
-npm test                                   # 22 tests, no network
+npm test                                   # 23 tests, no network
 IG_ACCESS_TOKEN=... npm run dry-run        # shows what it would send, sends nothing
 IG_ACCESS_TOKEN=... npm start              # sends
 ```
@@ -89,7 +90,7 @@ Nothing alerts anyone when runs fail. Check the Actions tab, or set up a daily c
 - **Polling, not instant.** Instagram only pushes comments to apps that have passed App Review (Advanced Access). Until then Echo checks on a timer, so the DM lands a few minutes after the comment rather than within seconds.
 - **Instagram only.** TikTok has no API for replying to comments.
 - **Replies inside threads.** A "TRIAL" written as a reply under someone else's comment should also get the DM, since Instagram lists replies alongside comments, but this has not been seen on the live account yet.
-- **Any comment containing the word.** "Already did my trial, loved it" matches too. If that person has had the DM before they are skipped; if not, they get it.
+- **One-word comments only.** "trial please" or "TRIAL @friend" gets nothing. That is deliberate (see `match` above), but it does mean near-misses are left for a person to answer.
 - **DM history goes back 20 messages.** Instagram only lets Echo read the 20 most recent messages in a thread. Someone who got the link, then exchanged more than 20 messages with us, then commented TRIAL again would be sent it again.
 - **Big reels.** Echo reads up to 1,000 comments per post per run, newest first, stopping at the 7-day mark.
 - **Organic posts only.** Comments on ads that aren't also on the profile grid are not in the list Echo reads.

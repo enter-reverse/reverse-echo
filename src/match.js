@@ -1,9 +1,12 @@
 // Keyword matching for comments.
 //
-// A rule matches when one of its keywords appears in the comment as a whole
-// word, whatever the case, punctuation or emoji around it:
-//   "TRIAL"  "trial!!"  "Trial please 🙏"  "can I get the trial?"   -> match
-//   "trials" "trialling" "entrial"                                   -> no match
+// By default a rule matches only when the comment IS the keyword and nothing
+// else, whatever the case, punctuation or emoji around it:
+//   "TRIAL"  "trial"  "Trial!!"  "#trial"  "trial 🙏"            -> match
+//   "trial please"  "can I get the trial?"  "did my trial, loved it"  -> no match
+//
+// A rule can opt back into matching the keyword anywhere in a sentence with
+// "match": "contains".
 
 /** Lowercase, strip accents, and turn everything that isn't a letter or digit into a space. */
 export function normalise(text) {
@@ -23,10 +26,17 @@ export function containsKeyword(text, keyword) {
   return haystack.includes(` ${needle} `);
 }
 
+/** True when the comment is exactly `keyword` once case, punctuation and emoji are stripped. */
+export function isKeyword(text, keyword) {
+  const needle = normalise(keyword);
+  return needle !== "" && normalise(text) === needle;
+}
+
 /** The first rule whose keywords match the comment, or null. Rules are checked in file order. */
 export function matchRule(text, rules) {
   for (const rule of rules) {
-    if (rule.keywords.some((k) => containsKeyword(text, k))) return rule;
+    const test = rule.match === "contains" ? containsKeyword : isKeyword;
+    if (rule.keywords.some((k) => test(text, k))) return rule;
   }
   return null;
 }
@@ -45,6 +55,9 @@ export function validateRules(config) {
     seen.add(rule.name);
     if (!Array.isArray(rule.keywords) || rule.keywords.length === 0 || rule.keywords.some((k) => !normalise(k))) {
       throw new Error(`${where}: "keywords" must be a non-empty list of words`);
+    }
+    if (rule.match !== undefined && rule.match !== "exact" && rule.match !== "contains") {
+      throw new Error(`${where}: "match" must be "exact" or "contains"`);
     }
     if (typeof rule.dm !== "string" || !rule.dm.trim()) throw new Error(`${where}: missing "dm" text`);
     if (rule.dm.length > 1000) throw new Error(`${where}: "dm" is ${rule.dm.length} characters; Instagram's limit is 1000`);

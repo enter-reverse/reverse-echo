@@ -1,0 +1,15 @@
+# The hosted CX watcher: instant TRIAL and claim replies, and the day-1 follow-up.
+name = "reverse-cx"
+main = "src/index.js"
+compatibility_date = "2026-11-01"
+
+[triggers]
+crons = ["* * * * *"]
+
+[vars]
+# "1" = log what would be sent and send nothing. Set to "0" to go live.
+DRY_RUN = "1"
+# "on" = also send day-1 follow-ups. Leave "off" until paid customers are being labelled "paid" in Chatwoot.
+FOLLOWUPS = "off"
+
+# Secrets (set by the deploy workflow, never committed): CW_TOKEN, CW_ACC

@@ -1,0 +1,51 @@
+# Echo: one pass over @enter.reverse's recent posts. Any comment that matches a
+# keyword in rules.json gets its DM and a public reply.
+#
+# Run by hand: Actions -> reply -> Run workflow (tick "dry run" to see what it
+# would send without sending anything).
+#
+# THE SCHEDULE IS OFF ON PURPOSE. Each scheduled run bills one Actions minute.
+# Every 5 minutes is about 8,640 minutes a month, more than four times the
+# 2,000 a private repo on the free plan gets for the whole organisation, and
+# Olympus's deploys draw on the same allowance. Turn the schedule on only if
+# this repo is public (public repos don't draw on it) or the runner is moved
+# off GitHub. See README "Where it runs".
+
+name: reply
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (log only, send nothing)"
+        type: boolean
+        default: true
+  # schedule:
+  #   - cron: "*/5 * * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: echo-reply
+  cancel-in-progress: false
+
+jobs:
+  reply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check rules.json
+        run: node src/cli.js --check
+      - name: Reply to matching comments
+        env:
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IGNORE_BEFORE: ${{ vars.IGNORE_BEFORE }}
+          # Scheduled runs send for real; manual runs follow the tick box.
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '0' }}
+        run: |
+          test -n "$IG_ACCESS_TOKEN" || { echo "::error::IG_ACCESS_TOKEN is not set in this repo's Actions secrets"; exit 1; }
+          node src/cli.js

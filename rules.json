@@ -1,0 +1,15 @@
+{
+  "rules": [
+    {
+      "name": "trial",
+      "keywords": ["trial"],
+      "dm": "Hey! Your trial pass is here: your first month is $199 instead of $299, with the $100 off already applied.\n\nhttps://pass.enterreverse.com/gift\n\nThat's 8 credits to use across HBOT, Red Light, Contrast and Dry Float, then $299 a month after, no commitment. Any questions, just ask me here :)\n\n- Zoey",
+      "publicReplies": [
+        "Sent you a DM!",
+        "Just sent it to your DMs :)",
+        "Check your DMs!"
+      ],
+      "fallbackReply": "Check your DMs! If nothing's there, message us TRIAL and we'll send it over :)"
+    }
+  ]
+}

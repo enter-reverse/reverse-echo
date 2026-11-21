@@ -1,0 +1,14 @@
+{
+  "name": "reverse-echo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Replies to Instagram comments that contain a keyword (e.g. TRIAL) with a set DM and a public reply.",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/cli.js",
+    "check": "node src/cli.js --check",
+    "dry-run": "DRY_RUN=1 node src/cli.js",
+    "test": "node --test"
+  }
+}

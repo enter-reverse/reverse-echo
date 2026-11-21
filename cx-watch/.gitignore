@@ -1,0 +1,11 @@
+# Working data: names customers, never commit
+env
+*.env
+claims.json
+notes.json
+monitor_state.json
+dashboard.json
+autosent.log
+r*.txt
+slots_run.sql
+__pycache__/

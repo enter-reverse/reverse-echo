@@ -1,0 +1,19 @@
+# Echo on Cloudflare Workers: the same code as the GitHub workflow, started every
+# minute by Cloudflare's own timer instead of GitHub's.
+name = "reverse-echo"
+main = "src/index.js"
+compatibility_date = "2026-11-01"
+
+[triggers]
+crons = ["* * * * *"]
+
+[vars]
+# "1" = log what would be sent and send nothing. Set to "0" to go live.
+DRY_RUN = "1"
+# The free plan allows 50 outgoing calls per run, so each pass is kept small.
+# Whatever doesn't fit is picked up a minute later.
+MEDIA_LIMIT = "20"
+MAX_LOOKUPS = "6"
+MAX_ACTIONS = "5"
+
+# Secret (set by the deploy workflow, never committed): IG_ACCESS_TOKEN

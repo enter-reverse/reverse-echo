@@ -55,7 +55,7 @@ Logs are public because the repo is public, so usernames are masked (`@ab…`) a
 ## Run it
 
 ```sh
-npm test                                   # 23 tests, no network
+npm test                                   # 24 tests, no network
 IG_ACCESS_TOKEN=... npm run dry-run        # shows what it would send, sends nothing
 IG_ACCESS_TOKEN=... npm start              # sends
 ```
@@ -72,6 +72,17 @@ Settings (environment): `IG_ACCESS_TOKEN` (required), `DRY_RUN`, `DIAGNOSE`, `HI
 ## Where it runs
 
 GitHub Actions, `.github/workflows/reply.yml`, every 5 minutes (GitHub often starts scheduled runs late, so expect 5 to 15 minutes from comment to DM). A daily `keepalive` job re-enables the workflow, because GitHub switches off schedules in public repos after 60 days without a commit. The schedule only runs while the repo is public; the reason is in the workflow's header comment. Actions → reply → Run workflow does a pass by hand, with a dry-run tick box and a diagnose option.
+
+## Running on Cloudflare instead (built, not switched on)
+
+GitHub's timer did not fire once on this repo in its first hours, so the same pass is also packaged as a Cloudflare Worker (`worker/`), which Cloudflare starts every minute. It is not live until someone connects a Cloudflare account:
+
+1. Create a free Cloudflare account.
+2. Add two Actions secrets to this repo: `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` (a token made from Cloudflare's "Edit Cloudflare Workers" template).
+3. Run Actions → deploy-worker. It deploys the Worker in dry-run mode and copies `IG_ACCESS_TOKEN` across.
+4. Read the Worker's logs for a few minutes, then set `DRY_RUN = "0"` in `worker/wrangler.toml` to go live, and in the same change remove the `schedule:` block from `reply.yml`, so the two timers never both send.
+
+The free plan allows 50 outgoing calls per run, so each pass is capped (20 posts, 6 DM-thread reads, 5 sends); anything over that is handled a minute later.
 
 ## What would stop it
 

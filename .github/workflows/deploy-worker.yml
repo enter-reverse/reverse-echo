@@ -1,0 +1,54 @@
+# Deploys Echo to Cloudflare Workers, where Cloudflare's timer starts it every
+# minute. Runs when the Worker or the code it uses changes on main, or by hand.
+#
+# Needs two Actions secrets: CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID.
+# Until both exist this workflow does nothing and reports why. The Instagram
+# token is copied from this repo's IG_ACCESS_TOKEN secret into the Worker on
+# every deploy, so GitHub stays the one place it is kept.
+
+name: deploy-worker
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths: ["worker/**", "src/**", "rules.json"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-worker
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the Cloudflare secrets are set
+        id: ready
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::notice::Cloudflare isn't connected yet (CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID not set), so nothing was deployed."
+            echo "go=no" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=yes" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Test
+        if: steps.ready.outputs.go == 'yes'
+        run: node --version && node --test
+      - name: Deploy
+        if: steps.ready.outputs.go == 'yes'
+        working-directory: worker
+        run: npx --yes wrangler@4 deploy
+      - name: Give the Worker the Instagram token
+        if: steps.ready.outputs.go == 'yes'
+        working-directory: worker
+        run: |
+          test -n "$IG_ACCESS_TOKEN" || { echo "::error::IG_ACCESS_TOKEN is not set in this repo's Actions secrets"; exit 1; }
+          printf '%s' "$IG_ACCESS_TOKEN" | npx --yes wrangler@4 secret put IG_ACCESS_TOKEN

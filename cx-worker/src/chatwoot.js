@@ -8,7 +8,9 @@ export function createChatwoot({ token, account, host = "https://app.chatwoot.co
   if (!token || !account) throw new Error("CW_TOKEN / CW_ACC are not set");
   const base = `${host}/api/v1/accounts/${account}`;
 
+  let used = 0;
   async function call(method, path, body) {
+    used++;
     let res;
     try {
       res = await fetchImpl(base + path, {
@@ -26,6 +28,8 @@ export function createChatwoot({ token, account, host = "https://app.chatwoot.co
   const publicOnly = (payload) => (payload ?? []).filter((m) => (m.message_type === 0 || m.message_type === 1) && !m.private);
 
   return {
+    /** How many requests this client has made. Cloudflare's free plan allows 50 per run. */
+    used: () => used,
     /** First page (the 25 most recently active) of conversations in a status. */
     async conversations(status) {
       return (await call("GET", `/conversations?status=${status}&assignee_type=all&page=1`)).data?.payload ?? [];

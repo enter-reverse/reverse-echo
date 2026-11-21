@@ -316,3 +316,16 @@ test("a TRIAL or claim message nobody auto-answered raises the 5-minute alarm; a
   assert.equal(s.alertsSent, 0);
   assert.match(s.errors[0], /ALERT NOT DELIVERED for conversation 7/);
 });
+
+test("a day-old claim past the first page still gets its follow-up, and later passes give way when requests run low", async () => {
+  const filler = Array.from({ length: 25 }, (_, i) => conv(200 + i, INBOX.waCx, "New", { labels: ["claim"] }));
+  const f = fake({ labelled: [...filler, claimConv(1, "El")], threads: { 1: claimThread(21 * H) } });
+  await go(f, { followups: true });
+  assert.deepEqual(f.sent.map((x) => x.cid), [1]);
+
+  const tight = fake({ labelled: [claimConv(1, "El")], threads: { 1: claimThread(21 * H) } });
+  tight.api.used = () => 45;
+  const s = await go(tight, { followups: true });
+  assert.deepEqual(tight.sent, []);
+  assert.equal(s.skipped, 1);
+});

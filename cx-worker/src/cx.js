@@ -46,6 +46,9 @@ export async function tick({ api, options = {}, log = console.log }) {
   const tag = dryRun ? "[dry run] " : "";
   let threads = 0;
   let sends = 0;
+  // Cloudflare's free plan stops a run at 50 requests. The auto-replies go first; the later passes give way
+  // once 38 are spent, and pick up whatever they skipped on their next turn.
+  const room = () => (api.used?.() ?? 0) < 38;
 
   // ---- 1. auto-replies -------------------------------------------------------------
   const read = new Map(); // conversation id -> messages already fetched in this pass
@@ -89,13 +92,23 @@ export async function tick({ api, options = {}, log = console.log }) {
 
   // ---- 2. day-1 follow-ups ---------------------------------------------------------
   if (followups) {
-    let claims = [];
-    try { claims = await api.labelled("claim"); } catch (err) { summary.errors.push(`claims list: ${err.message}`); }
+    const claims = [];
+    try {
+      // A day-old claim can sit past the first page (the 25 most recently active) on a busy day.
+      for (let page = 1; page <= 3; page++) {
+        const got = await api.labelled("claim", page);
+        claims.push(...got);
+        if (got.length < 25) break;
+      }
+    } catch (err) { summary.errors.push(`claims list: ${err.message}`); }
     for (const c of claims) {
       const labels = new Set(c.labels ?? []);
       // Only WhatsApp claims at $100 off. Duo ($299 off), Instagram and anything a person has flagged are left to people.
       if (c.inbox_id !== INBOX.waCx || labels.has("duo") || labels.has("paid") || labels.has("no-followup") || labels.has("fu1")) continue;
-      if (threads >= maxThreads * 2 || sends >= maxSends) { summary.skipped++; continue; }
+      // Cheap first: only a claim last active 4 to 30 hours ago can be due.
+      const quiet = now - (c.last_activity_at ?? now);
+      if (quiet < 4 * HOUR || quiet > 30 * HOUR) continue;
+      if (threads >= maxThreads * 2 || sends >= maxSends || !room()) { summary.skipped++; continue; }
       threads++;
       try {
         const ms = await api.messages(c.id);
@@ -148,7 +161,7 @@ export async function tick({ api, options = {}, log = console.log }) {
       if (idle < DAY || idle > 6 * DAY) continue;
       const open = steps.filter(([k]) => !labels.has(TEMPLATES[k].label) && !(k === "day5" && labels.has("duo"))); // day 5 names the $100 off, which isn't the Duo offer
       if (!open.length) continue;
-      if (read >= 12 || sends >= maxSends) { summary.skipped++; continue; }
+      if (read >= 12 || sends >= maxSends || !room()) { summary.skipped++; continue; }
       read++;
       try {
         const ms = await api.messages(c.id);
@@ -191,7 +204,7 @@ export async function tick({ api, options = {}, log = console.log }) {
       try {
         let ms = read.get(cid);
         if (!ms) {
-          if (looked >= 8) { summary.skipped++; continue; }
+          if (looked >= 8 || !room()) { summary.skipped++; continue; }
           looked++;
           ms = await api.messages(cid);
         }

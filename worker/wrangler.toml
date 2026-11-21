@@ -12,8 +12,8 @@ workers_dev = false
 crons = ["* * * * *"]
 
 [vars]
-# "1" = log what would be sent and send nothing. Set to "0" to go live.
-DRY_RUN = "1"
+# "1" = log what would be sent and send nothing. "0" = live.
+DRY_RUN = "0"
 # The free plan allows 50 outgoing calls per run, so each pass is kept small.
 # Whatever doesn't fit is picked up a minute later.
 MEDIA_LIMIT = "20"

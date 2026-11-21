@@ -1,18 +1,11 @@
-# Echo: one pass over @enter.reverse's recent posts. Any comment that matches a
-# keyword in rules.json gets its DM and a public reply.
+# Echo by hand: one pass over @enter.reverse's recent posts. Any comment that
+# matches a keyword in rules.json gets its DM and a public reply.
 #
-# Run by hand: Actions -> reply -> Run workflow (tick "dry run" to see what it
-# would send without sending anything).
-#
-# The timer runs every 5 minutes, and only while this repo is PUBLIC. Public
-# repos don't draw on the organisation's Actions minutes; a private repo polling
-# every 5 minutes would use about 8,640 a month against an allowance of 2,000
-# that Olympus's deploys share. If the repo is ever made private the scheduled
-# job skips itself (a skipped job costs nothing); manual runs still work.
-#
-# GitHub runs a schedule as whoever last committed this file, and appears to
-# ignore it when that account has no access to the repo. Changes to this file
-# should land through a pull request merged by a repo member.
+# Echo's every-minute timer runs on Cloudflare (worker/, deployed by
+# deploy-worker.yml). This workflow has no schedule: GitHub's own timer never
+# fired on this repo, and two timers must never both send. Use it to run a pass
+# by hand: Actions -> reply -> Run workflow (tick "dry run" to see what it would
+# send without sending anything, or "diagnose" for extra detail).
 
 name: reply
 on:
@@ -26,9 +19,6 @@ on:
         description: "Diagnose (extra detail on already-answered comments)"
         type: boolean
         default: false
-  schedule:
-    - cron: "*/5 * * * *" # every 5 minutes
-    - cron: "17 3 * * *" # once a day: keepalive (below)
 
 permissions:
   contents: read
@@ -39,7 +29,6 @@ concurrency:
 
 jobs:
   reply:
-    if: github.event_name == 'workflow_dispatch' || github.event.repository.visibility == 'public'
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
@@ -47,30 +36,14 @@ jobs:
       # No dependencies to install: Echo runs on the Node that ships with the runner (20 or newer).
       - name: Check rules.json
         run: node --version && node src/cli.js --check
-      - name: Check the links in the DMs load (manual runs)
-        if: github.event_name == 'workflow_dispatch'
+      - name: Check the links in the DMs load
         run: node src/cli.js --check --links
       - name: Reply to matching comments
         env:
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
           IGNORE_BEFORE: ${{ vars.IGNORE_BEFORE }}
-          # Scheduled runs send for real; manual runs follow the tick box.
           DIAGNOSE: ${{ inputs.diagnose && '1' || '0' }}
-          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '0' }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
         run: |
           test -n "$IG_ACCESS_TOKEN" || { echo "::error::IG_ACCESS_TOKEN is not set in this repo's Actions secrets"; exit 1; }
           node src/cli.js
-
-  keepalive:
-    # GitHub switches off schedules in public repos after 60 days without a commit.
-    # Re-enabling the workflow once a day resets that clock, so Echo doesn't stop on its own.
-    if: github.event.schedule == '17 3 * * *'
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    permissions:
-      actions: write
-    steps:
-      - name: Keep the schedule enabled
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/reply.yml/enable"

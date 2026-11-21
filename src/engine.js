@@ -132,7 +132,7 @@ export async function runOnce({ api, rules, options = {}, log = console.log }) {
         summary.alreadyReplied++;
         if (dryRun) log(`[dry run] ${tag}: already has our reply -> skip`);
         if (diagnose) {
-          log(`[diagnose] ${tag}: replies: ${replies.map((r) => `${hasAuthor(r) ? (isOurs(r, me) ? "ours" : "other") : "no-author"} ${JSON.stringify(String(r.text ?? "").slice(0, 30))}`).join(" | ")}`);
+          log(`[diagnose] ${tag}: replies: ${replies.map((r) => `${hasAuthor(r) ? (isOurs(r, me) ? "ours" : "other") : "no-author"} ${JSON.stringify(String(r.text ?? "").replace(/@[\w.]+/g, "@…").slice(0, 30))}`).join(" | ")}`);
           if (personId) {
             try {
               const messages = await api.messagesWith(personId);

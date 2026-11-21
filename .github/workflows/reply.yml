@@ -4,12 +4,11 @@
 # Run by hand: Actions -> reply -> Run workflow (tick "dry run" to see what it
 # would send without sending anything).
 #
-# THE SCHEDULE IS OFF ON PURPOSE. Each scheduled run bills one Actions minute.
-# Every 5 minutes is about 8,640 minutes a month, more than four times the
-# 2,000 a private repo on the free plan gets for the whole organisation, and
-# Olympus's deploys draw on the same allowance. Turn the schedule on only if
-# this repo is public (public repos don't draw on it) or the runner is moved
-# off GitHub. See README "Where it runs".
+# The timer runs every 5 minutes, and only while this repo is PUBLIC. Public
+# repos don't draw on the organisation's Actions minutes; a private repo polling
+# every 5 minutes would use about 8,640 a month against an allowance of 2,000
+# that Olympus's deploys share. If the repo is ever made private the scheduled
+# job skips itself (a skipped job costs nothing); manual runs still work.
 
 name: reply
 on:
@@ -23,8 +22,8 @@ on:
         description: "Diagnose (extra detail on already-answered comments)"
         type: boolean
         default: false
-  # schedule:
-  #   - cron: "*/5 * * * *"
+  schedule:
+    - cron: "*/5 * * * *"
 
 permissions:
   contents: read
@@ -35,6 +34,7 @@ concurrency:
 
 jobs:
   reply:
+    if: github.event_name == 'workflow_dispatch' || github.event.repository.visibility == 'public'
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:

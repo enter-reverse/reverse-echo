@@ -30,40 +30,47 @@ Everything it says lives in [`rules.json`](rules.json). Each rule is one keyword
 
 ## How it works
 
-Each run reads the comments on the 25 most recent posts and answers any that match a rule and have no reply from us yet. There is no database: our public reply is what marks a comment as done, so a comment is never DMed twice, and Instagram itself refuses a second DM to the same comment.
+Every 5 minutes Echo reads the comments on the 25 most recent posts and answers any that match a rule. There is no database. Two checks stop anyone being messaged twice:
+
+1. **Our reply under the comment.** A comment that already has a reply from @enter.reverse is done. (Instagram returns our own replies without an author, so a reply with no author counts as ours.)
+2. **The DM thread.** Before any DM, Echo reads the recent messages with that person. If we have already sent them this rule's message, whether by Echo, by hand or by the CX auto-reply, they get nothing more: no DM and no public reply. "This rule's message" means a message containing the first link in the rule's `dm` (or the rule's `sentMarker`, if set).
+
+If either check can't be answered for certain, Echo sends nothing and tries again on the next run.
 
 | Case | What happens |
 |---|---|
-| DM sent | Public reply from `publicReplies` |
+| New TRIAL comment, never messaged | DM, then a public reply from `publicReplies` |
+| Comment already has our reply | Skipped |
+| Person already got this DM | Skipped: no DM, no public reply |
 | Instagram won't deliver the DM (e.g. the person blocks message requests) | `fallbackReply` is posted instead |
-| Rate limit or Instagram outage | Nothing is posted; the next run tries again |
+| Rate limit, Instagram outage, or DM history unreadable | Nothing is sent; the next run tries again |
 | Same person comments twice in one run | One DM, a public reply on each |
 | Comment older than 7 days | Skipped (Instagram's limit for a DM to a commenter) |
-| Comment older than `IGNORE_BEFORE` | Skipped, so go-live doesn't re-message people already handled by hand |
+| Comment older than `IGNORE_BEFORE` (optional) | Skipped |
 | Access token rejected | The run stops and fails loudly |
+
+Logs are public because the repo is public, so usernames are masked (`@ab…`) and message text is never logged.
 
 ## Run it
 
 ```sh
-npm test                                   # 19 tests, no network
+npm test                                   # 20 tests, no network
 IG_ACCESS_TOKEN=... npm run dry-run        # shows what it would send, sends nothing
 IG_ACCESS_TOKEN=... npm start              # sends
 ```
 
-Settings (environment): `IG_ACCESS_TOKEN` (required), `DRY_RUN`, `IGNORE_BEFORE` (ISO time), `MEDIA_LIMIT` (25), `MAX_ACTIONS` (40 per run), `IG_API_VERSION` (v25.0).
+Settings (environment): `IG_ACCESS_TOKEN` (required), `DRY_RUN`, `DIAGNOSE`, `HISTORY_CHECK`, `IGNORE_BEFORE` (ISO time), `MEDIA_LIMIT` (25), `MAX_ACTIONS` (40 per run), `IG_API_VERSION` (v25.0).
 
-## Set-up, once
+## Set-up (done 21 Nov 2026)
 
-1. **Meta app.** At developers.facebook.com create an app with the Instagram product ("API setup with Instagram login"), with the permissions `instagram_business_basic`, `instagram_business_manage_comments` and `instagram_business_manage_messages`. The app can stay at Standard Access because it only serves our own account.
-2. **Token.** In that app's "Generate access tokens" section, add the @enter.reverse account and copy the token.
-3. **Secret.** Save it as the `IG_ACCESS_TOKEN` Actions secret in this repo, and set the `IGNORE_BEFORE` variable to the go-live time.
-4. **Dry run.** Actions → reply → Run workflow with "dry run" ticked, and read the log.
+- **Meta app:** "Reverse Marketing" (app ID 2021787335883788), use case "Manage messaging & content on Instagram", API setup with Instagram login, with `instagram_business_basic`, `instagram_business_manage_comments` and `instagram_business_manage_messages`. @enter.reverse is added as an Instagram Tester.
+- **Token:** generated on that page for @enter.reverse and stored as the `IG_ACCESS_TOKEN` Actions secret in this repo.
 
-The token lasts 60 days. It has to be refreshed or regenerated before then; automatic refresh is not built yet.
+**The token lasts 60 days (until about 20 Jan 2027).** Before then, generate a new one on the same Meta page and update the secret; automatic refresh is not built. Meta now labels Instagram login "legacy" and recommends "Unified login", whose system-user token does not expire. Moving Echo to it is the planned fix.
 
 ## Where it runs
 
-`.github/workflows/reply.yml` runs a pass by hand today. Its schedule is switched off, because a private repo polling every 5 minutes would use about 8,640 Actions minutes a month against the organisation's 2,000. The choices are in the workflow's header comment: make this repo public, or run the same `src/cli.js` on a host with a per-minute timer.
+GitHub Actions, `.github/workflows/reply.yml`, every 5 minutes (GitHub often starts scheduled runs late, so expect 5 to 15 minutes from comment to DM). The schedule only runs while the repo is public; the reason is in the workflow's header comment. Actions → reply → Run workflow does a pass by hand, with a dry-run tick box and a diagnose option.
 
 ## Limits
 
@@ -71,4 +78,4 @@ The token lasts 60 days. It has to be refreshed or regenerated before then; auto
 - **Instagram only.** TikTok has no API for replying to comments.
 - **Top-level comments only.** A "TRIAL" written as a reply inside someone else's thread is not picked up.
 - **Organic posts only.** Comments on ads that aren't also on the profile grid are not in the list Echo reads.
-- **Not yet run against the live account.** The Instagram calls follow Meta's documentation and are tested against a fake; the first dry run with a real token is the real test.
+- **Reading is proven on the live account; sending is not yet.** Dry runs on 21 Nov 2026 read comments, replies and DM threads correctly. The first real DM and public reply will be the test of the two sending calls.

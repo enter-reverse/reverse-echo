@@ -1,0 +1,37 @@
+# Check what the Instagram token can do, without posting or sending anything.
+#
+# Run by hand: Actions -> check-token -> Run workflow.
+# It makes two read-only calls:
+#   1. /me: which account the token belongs to (proves the token works).
+#   2. /me/content_publishing_limit: the account's posting quota. Instagram only
+#      answers this when the token has instagram_business_content_publish, so an
+#      answer means Echo could post; a refusal means that permission is missing.
+# Nothing is created, published or sent, and the token never appears in the log.
+
+name: check-token
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check the token's permissions (read only)
+        env:
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          V: v25.0
+        run: |
+          test -n "$IG_ACCESS_TOKEN" || { echo "::error::IG_ACCESS_TOKEN is not set"; exit 1; }
+          ask() { curl -s -G "https://graph.instagram.com/$V/$1" --data-urlencode "fields=$2" --data-urlencode "access_token=$IG_ACCESS_TOKEN"; }
+          me=$(ask me "username,account_type")
+          echo "Account: $(echo "$me" | jq -c '{username, account_type, error: .error.message}')"
+          lim=$(ask me/content_publishing_limit "config,quota_usage")
+          if echo "$lim" | jq -e '.data' >/dev/null 2>&1; then
+            echo "POSTING: ALLOWED. Quota: $(echo "$lim" | jq -c '.data')"
+          else
+            echo "POSTING: NOT ALLOWED. Instagram said: $(echo "$lim" | jq -r '.error.message // .')"
+          fi

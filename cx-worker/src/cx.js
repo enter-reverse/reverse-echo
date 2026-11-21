@@ -28,9 +28,10 @@ const sender = (c) => c.meta?.sender ?? {};
  * @param {boolean} deps.options.followups   run the day-1 follow-ups (default false)
  * @param {number}  deps.options.now         unix seconds
  * @param {number}  [deps.options.freshSecs] only auto-reply to messages newer than this (default 15 min)
+ * @param {number}  [deps.options.minAgeSecs] and older than this (default 75 s), see below
  */
 export async function tick({ api, options = {}, log = console.log }) {
-  const { dryRun = true, followups = false, now = Math.floor(Date.now() / 1000), freshSecs = 15 * 60, maxThreads = 15, maxSends = 5 } = options;
+  const { dryRun = true, followups = false, now = Math.floor(Date.now() / 1000), freshSecs = 15 * 60, minAgeSecs = 75, maxThreads = 15, maxSends = 5 } = options;
   const summary = { checked: 0, autoSent: 0, followupsSent: 0, skipped: 0, errors: [] };
   const tag = dryRun ? "[dry run] " : "";
   let threads = 0;
@@ -52,12 +53,17 @@ export async function tick({ api, options = {}, log = console.log }) {
       const ms = await api.messages(cid);
       summary.checked++;
       if (ms.some((m) => m.message_type === 1)) continue; // never reply twice
-      const hit = ms.find((m) => m.message_type === 0 && m.created_at > now - freshSecs && kindOf(m.content, c.inbox_id));
+      // The watcher in the CX chat sends the same replies within about 30 seconds whenever it is awake.
+      // Waiting until the message is over a minute old gives it the first turn, so the two never both
+      // answer; when it is asleep, this one answers a minute or two after the message.
+      const hit = ms.find((m) => m.message_type === 0 && m.created_at > now - freshSecs && m.created_at <= now - minAgeSecs && kindOf(m.content, c.inbox_id));
       if (!hit) continue;
       const kind = kindOf(hit.content, c.inbox_id);
       if (sends >= maxSends) { summary.skipped++; continue; }
       sends++;
       if (dryRun) { log(`${tag}would send the ${kind} reply in conversation ${cid}`); continue; }
+      // Look once more immediately before sending, in case a reply landed while this pass was running.
+      if ((await api.messages(cid)).some((m) => m.message_type === 1)) continue;
       await api.send(cid, tpl(kind, firstName(sender(c).name)));
       summary.autoSent++;
       log(`AUTO-SENT ${kind} reply in conversation ${cid}`);

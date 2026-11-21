@@ -55,7 +55,7 @@ Logs are public because the repo is public, so usernames are masked (`@ab…`) a
 ## Run it
 
 ```sh
-npm test                                   # 33 tests, no network
+npm test                                   # 34 tests, no network
 IG_ACCESS_TOKEN=... npm run dry-run        # shows what it would send, sends nothing
 IG_ACCESS_TOKEN=... npm start              # sends
 ```
@@ -79,16 +79,16 @@ On Cloudflare Workers (`worker/`), started every minute by Cloudflare's timer, s
 
 The free Cloudflare plan allows 50 outgoing calls per run, so each pass is capped (20 posts, 6 DM-thread reads, 5 sends); anything over that is handled a minute later.
 
-## The CX watcher (`cx-worker/`, built, not switched on)
+## The CX watcher (`cx-worker/`, live for auto-replies)
 
 A second Worker that does the two things in customer chats that are pure templates, around the clock. It is a port of the watcher that ran inside the CX chat (`cx-watch/`), and its tests check every template against that script's own output.
 
-- **Auto-replies.** A message that is just "TRIAL", or a claim from the website's WhatsApp button (HBOT, Red Light, Contrast, Dry Float, Duo), gets its reply within a minute, but only in a conversation we have never written in, and only if the message is under 15 minutes old.
+- **Auto-replies (live).** A message that is just "TRIAL", or a claim from the website's WhatsApp button (HBOT, Red Light, Contrast, Dry Float, Duo), gets its reply one to two minutes after it arrives, but only in a conversation we have never written in, and only if the message is under 15 minutes old. The wait is deliberate: the watcher in the CX chat sends the same replies within about 30 seconds whenever it is awake, so this one only answers messages over 75 seconds old, and looks once more right before sending. The two never both answer, and nothing has to be switched over between them.
 - **Day-1 follow-up** (off until `FOLLOWUPS = "on"`). A WhatsApp claimer who has gone quiet gets the approved line about 20 hours in, before WhatsApp's 24-hour window closes. Skipped if they wrote last, if we already followed up, or if the conversation is labelled `paid`, `no-followup` or `duo`.
 
 It keeps no database. Chatwoot labels are the record: `claim`, `trial`, `duo` say what a conversation is, `fu1` that the day-1 follow-up went, and a person can add `paid` or `no-followup` to stop it. Everything that needs judgment (drafting replies, the 10 and 20 minute pings, days 3 and 5, the CX Board) stays with the CX chat.
 
-To switch it on: add the `CHATWOOT_TOKEN` and `CHATWOOT_ACCOUNT_ID` Actions secrets, run deploy-worker, read the Worker's logs in dry run, then set `DRY_RUN = "0"` in `cx-worker/wrangler.toml`. **In the same step, the CX chat's own watcher must stop auto-replying**, or both could answer the same customer. Turn `FOLLOWUPS` on only once paying customers are reliably being labelled `paid`.
+It uses the `CHATWOOT_TOKEN` and `CHATWOOT_ACCOUNT_ID` Actions secrets, copied into the Worker on every deploy. To pause it, set `DRY_RUN = "1"` in `cx-worker/wrangler.toml` and merge. Turn `FOLLOWUPS` on only once paying customers are reliably being labelled `paid`.
 
 ## What would stop it
 

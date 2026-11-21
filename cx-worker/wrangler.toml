@@ -11,8 +11,8 @@ workers_dev = false
 crons = ["* * * * *"]
 
 [vars]
-# "1" = log what would be sent and send nothing. Set to "0" to go live.
-DRY_RUN = "1"
+# "1" = log what would be sent and send nothing. "0" = live.
+DRY_RUN = "0"
 # "on" = also send day-1 follow-ups. Leave "off" until paid customers are being labelled "paid" in Chatwoot.
 FOLLOWUPS = "off"
 

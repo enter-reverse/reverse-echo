@@ -24,11 +24,8 @@ export default {
       (async () => {
         try {
           const { errors, ...counts } = await run(env);
-          // In dry run every pass is logged, so it's visible that the watcher is alive and reaching Chatwoot.
-          const dryRun = !(env.DRY_RUN === "0" || env.DRY_RUN === "false");
-          if (dryRun || counts.autoSent || counts.followupsSent || counts.skipped || errors.length) {
-            console.log(JSON.stringify({ dryRun, ...counts }));
-          }
+          // One line per pass, so the log shows the watcher is alive and reaching Chatwoot.
+          console.log(JSON.stringify({ dryRun: !(env.DRY_RUN === "0" || env.DRY_RUN === "false"), ...counts }));
           for (const e of errors) console.warn(`warning: ${e}`);
         } catch (err) {
           console.error(`run failed: ${err.message}`);

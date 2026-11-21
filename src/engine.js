@@ -110,7 +110,22 @@ export async function runOnce({ api, rules, options = {}, log = console.log }) {
       const tag = `${rule.name}: comment ${c.id} by ${who}`;
 
       // Check 1: have we already replied under this comment?
-      const replies = c.replies?.data ?? [];
+      let replies = c.replies?.data ?? [];
+      if (replies.length && replies.some((r) => !hasAuthor(r))) {
+        // The nested list came back without authors; ask for this comment's replies directly.
+        try {
+          replies = await api.replies(c.id);
+          if (dryRun && !history.replyShapeLogged) {
+            history.replyShapeLogged = true;
+            log(`[dry run] reply fields (direct): ${Object.keys(replies[0] ?? {}).join(",") || "-"}; from: ${Object.keys(replies[0]?.from ?? {}).join(",") || "-"}`);
+          }
+        } catch (err) {
+          if (err.kind === "auth") throw err;
+          summary.deferred++;
+          summary.errors.push(`${tag}: couldn't read its replies (code ${err.code ?? "?"}: ${err.message}); not sending`);
+          continue;
+        }
+      }
       if (replies.some((r) => isOurs(r, me))) {
         summary.alreadyReplied++;
         if (dryRun) log(`[dry run] ${tag}: already has our reply -> skip`);

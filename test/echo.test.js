@@ -34,10 +34,11 @@ test("validateRules rejects broken edits with a readable message", () => {
 });
 
 /** A fake Instagram account. `comments` is { mediaId: [comment] }. */
-function fakeApi({ comments, failDm = {}, failReply = {}, threads = {}, failHistory = null }) {
+function fakeApi({ comments, failDm = {}, failReply = {}, threads = {}, failHistory = null, directReplies = {} }) {
   const sent = { dms: [], replies: [] };
   const api = {
     me: async () => ({ username: "enter.reverse", id: "app-1", user_id: "17841" }),
+    replies: async (commentId) => directReplies[commentId] ?? Object.values(comments).flat().find((c) => c.id === commentId)?.replies?.data ?? [],
     messagesWith: async (userId) => {
       if (failHistory) throw failHistory;
       return threads[userId] ?? [];
@@ -193,6 +194,19 @@ test("a reply with no author is treated as possibly ours; our replies are recogn
   assert.deepEqual(sent.dms.map((d) => d.commentId), ["c3"]);
   assert.equal(s.alreadyReplied, 1);
   assert.equal(s.deferred, 1);
+});
+
+test("when the comment list hides reply authors, Echo looks the replies up directly", async () => {
+  const { api, sent } = fakeApi({
+    comments: { m1: [comment("c1", "amy", "TRIAL", 1, [{ id: "r1" }]), comment("c2", "bob", "TRIAL", 1, [{ id: "r2" }])] },
+    directReplies: {
+      c1: [{ id: "r1", text: "Sent you a DM!", from: { id: "17841", username: "enter.reverse" } }],
+      c2: [{ id: "r2", text: "same!", from: { id: "u_zed", username: "zed" } }],
+    },
+  });
+  const s = await run(api);
+  assert.deepEqual(sent.dms.map((d) => d.commentId), ["c2"]);
+  assert.equal(s.alreadyReplied, 1);
 });
 
 test("names are masked in logs and the marker defaults to the DM's link", () => {

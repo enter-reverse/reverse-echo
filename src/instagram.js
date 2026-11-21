@@ -87,6 +87,14 @@ export function createClient({ token, version = "v25.0", host = "https://graph.i
       return out;
     },
 
+    /** The replies under one comment, with who wrote each. (The nested list on `comments` comes back without authors.) */
+    async replies(commentId) {
+      const page = await call("GET", `${commentId}/replies`, {
+        query: { fields: "id,text,timestamp,username,from", limit: "50" },
+      });
+      return page.data ?? [];
+    },
+
     /**
      * The most recent DMs (up to 20) between the account and one person, by their
      * Instagram-scoped id: [{ from: { id, username }, message, created_time }].

@@ -49,7 +49,14 @@ export function createChatwoot({ token, account, host = "https://app.chatwoot.co
     async contactConversations(contactId) {
       return (await call("GET", `/contacts/${contactId}/conversations`)).payload ?? [];
     },
+    /** Every message of a conversation including private notes, oldest first (the pass counter keeps its running total in them). */
+    async allMessages(cid) {
+      return ((await call("GET", `/conversations/${cid}/messages`)).payload ?? [])
+        .filter((m) => m.message_type === 0 || m.message_type === 1).sort((a, b) => a.created_at - b.created_at);
+    },
     send: (cid, content) => call("POST", `/conversations/${cid}/messages`, { content, message_type: "outgoing", private: false }),
+    /** A private note: seen by the team in Chatwoot, never sent to the customer. */
+    note: (cid, content) => call("POST", `/conversations/${cid}/messages`, { content, message_type: "outgoing", private: true }),
     /** A Meta-approved WhatsApp template, which may be sent after the 24-hour window. `content` is what Chatwoot shows. */
     sendTemplate: (cid, { name, language = "en", category = "MARKETING", body, content }) =>
       call("POST", `/conversations/${cid}/messages`, {

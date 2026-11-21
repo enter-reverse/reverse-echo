@@ -94,6 +94,8 @@ It keeps no database. Chatwoot labels are the record: `claim`, `trial`, `duo` sa
 
 - **Paid labels from Shopify.** Shopify's "Order payment" webhook posts to this Worker at `/shopify`. The Worker checks the signature against `SHOPIFY_WEBHOOK_SECRET`, finds the buyer's Chatwoot contacts by exact email or by the last 8 digits of their phone, and labels their conversations `paid`. A buyer who paid with a different phone and email from the one they chatted on is not matched; label those by hand.
 
+- **Pass counter.** On the same Shopify notification, a paid pass order (sku 100116) WhatsApps Elijah from Zoey's number with the new total and a short journey: where they claimed, where they came to checkout from, their chat (messages, first question, our follow-ups) and how long from first contact to paying, saying plainly what couldn't be traced. All-Access counts 1, Duo 2; Red Light monthly and team tests count nothing. There is no database: the total is read back from the last "Total: N" in his chat (`PASS_ALERT_CONV`), starting from `PASS_BASE_TOTAL` (61 on 22 Nov 2026). WhatsApp only lets us write within 24 hours of his last message there; outside that, the message is left as a private note in that chat instead (it still carries the total). Studio sales rung up in Mindbody don't reach Shopify, so the CX chat adds those. Set `PASS_ALERT_CONV = ""` to switch it off.
+
 It uses the `CHATWOOT_TOKEN` and `CHATWOOT_ACCOUNT_ID` Actions secrets, copied into the Worker on every deploy. To pause it, set `DRY_RUN = "1"` in `cx-worker/wrangler.toml` and merge. Turn `FOLLOWUPS` on only once paying customers are reliably being labelled `paid`.
 
 ## What would stop it

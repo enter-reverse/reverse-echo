@@ -3,6 +3,7 @@
 import { createChatwoot } from "./chatwoot.js";
 import { tick } from "./cx.js";
 import { markPaid, verify } from "./shopify.js";
+import { countPass } from "./passes.js";
 
 export async function run(env, { fetchImpl = fetch, log = console.log, now = Math.floor(Date.now() / 1000) } = {}) {
   const api = createChatwoot({ token: env.CW_TOKEN, account: env.CW_ACC, fetchImpl });
@@ -55,6 +56,8 @@ export default {
     const dryRun = !(env.DRY_RUN === "0" || env.DRY_RUN === "false");
     // Answer Shopify straight away (it retries anything slower than 5 seconds) and finish the labelling after.
     ctx.waitUntil(markPaid({ api, order, dryRun }).catch((err) => console.error(`Shopify paid label failed: ${err.message}`)));
+    // The pass counter: WhatsApp the user the new total and the buyer's journey (off until PASS_ALERT_CONV is set).
+    ctx.waitUntil(countPass({ api, order, env, dryRun }).catch((err) => console.error(`pass counter failed: ${err.message}`)));
     return new Response("ok");
   },
 };

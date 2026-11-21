@@ -22,6 +22,11 @@ FOLLOWUP_DAY3 = "off"
 FOLLOWUP_DAY5 = "off"
 # The language code the templates were approved under ("en", or "en_US" / "en_GB" if that was picked).
 TEMPLATE_LANGUAGE = "en"
+# The pass counter (src/passes.js): each paid pass order on Shopify WhatsApps the user (Elijah) the new total and
+# the buyer's journey. PASS_ALERT_CONV is his chat with Zoey's number in Chatwoot; "" switches it off.
+# PASS_BASE_TOTAL is used only until a "Total: N" message exists in that chat (61, confirmed 22 Nov 2026).
+PASS_ALERT_CONV = "410"
+PASS_BASE_TOTAL = "61"
 
 # Secrets (set by the deploy workflow, never committed): CW_TOKEN, CW_ACC, SHOPIFY_WEBHOOK_SECRET
 

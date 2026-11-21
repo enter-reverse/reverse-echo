@@ -1,10 +1,13 @@
 // One pass over the account: find comments that match a rule and haven't been
 // answered, DM the commenter, then reply publicly under the comment.
 //
-// There is no database. A comment counts as handled once our own account has
-// replied under it, so the public reply is both the customer-facing "Sent you
-// a DM!" and the marker that stops a second DM. Instagram itself also refuses
-// a second private reply to the same comment.
+// There is no database. Two things stop anyone being messaged twice:
+//   1. A comment our own account has already replied under is done.
+//   2. Before any DM, Echo reads the DM thread with that person. If we have
+//      already sent them this rule's message (by Echo, by hand, or by the CX
+//      auto-reply), they get nothing more: no DM and no public reply.
+// When either check can't be answered for certain, Echo sends nothing and
+// tries again on the next run.
 
 import { matchRule } from "./match.js";
 
@@ -12,7 +15,26 @@ const DAY = 24 * 60 * 60 * 1000;
 // Instagram's private-reply window is 7 days from the comment. Stop a little short of it.
 export const REPLY_WINDOW_MS = 7 * DAY - 60 * 60 * 1000;
 
-const sameUser = (a, b) => String(a ?? "").toLowerCase() === String(b ?? "").toLowerCase();
+const same = (a, b) => a != null && b != null && String(a).toLowerCase() === String(b).toLowerCase();
+
+/** Is this comment, reply or message written by the connected account? */
+export function isOurs(item, me) {
+  const id = item?.from?.id;
+  return (
+    same(item?.username, me.username) ||
+    same(item?.from?.username, me.username) ||
+    (id != null && (same(id, me.id) || same(id, me.user_id)))
+  );
+}
+
+const hasAuthor = (item) => item?.username != null || item?.from?.id != null || item?.from?.username != null;
+
+/** What identifies "this rule's message" in a DM thread: `sentMarker`, else the first link in the DM, else its opening words. */
+export function sentMarker(rule) {
+  if (rule.sentMarker) return rule.sentMarker;
+  const url = rule.dm.match(/https?:\/\/[^\s]+/);
+  return url ? url[0] : rule.dm.slice(0, 40);
+}
 
 /** Picks a public reply so the same line isn't posted under every comment (stable per comment). */
 export function pickReply(replies, commentId) {
@@ -21,24 +43,35 @@ export function pickReply(replies, commentId) {
   return replies[sum % replies.length];
 }
 
+/** "@ab…" — logs are public on a public repo, so names are never written out in full. */
+export function mask(username) {
+  const u = String(username ?? "");
+  return u ? `@${u.slice(0, 2)}…` : "@?";
+}
+
 /**
  * @param {object} deps
  * @param {object} deps.api            client from instagram.js
  * @param {object[]} deps.rules        validated rules
  * @param {object} [deps.options]
- * @param {boolean} [deps.options.dryRun]      log what would be sent, send nothing
- * @param {number}  [deps.options.mediaLimit]  how many recent posts to check (default 25)
- * @param {number}  [deps.options.maxActions]  cap on comments answered per run (default 40)
+ * @param {boolean} [deps.options.dryRun]       log what would be sent, send nothing
+ * @param {number}  [deps.options.mediaLimit]   how many recent posts to check (default 25)
+ * @param {number}  [deps.options.maxActions]   cap on comments looked into per run (default 40)
  * @param {Date}    [deps.options.ignoreBefore] never answer comments older than this (go-live time)
+ * @param {boolean} [deps.options.historyCheck] read the DM thread before sending (default true)
  * @param {Date}    [deps.options.now]
  * @param {(line: string) => void} [deps.log]
  */
 export async function runOnce({ api, rules, options = {}, log = console.log }) {
-  const { dryRun = false, mediaLimit = 25, maxActions = 40, ignoreBefore = null, now = new Date() } = options;
-  const summary = { checkedMedia: 0, checkedComments: 0, matched: 0, dmSent: 0, replied: 0, fallback: 0, deferred: 0, skippedOld: 0, errors: [] };
+  const { dryRun = false, mediaLimit = 25, maxActions = 40, ignoreBefore = null, historyCheck = true, now = new Date() } = options;
+  const summary = {
+    checkedMedia: 0, checkedComments: 0, matched: 0, alreadyReplied: 0, alreadyDmed: 0,
+    dmSent: 0, replied: 0, fallback: 0, deferred: 0, skippedOld: 0, errors: [],
+  };
 
   const me = await api.me();
   const dmedThisRun = new Set();
+  const history = new Map(); // person -> their recent DMs with us, read once per run
   let actions = 0;
 
   const media = await api.recentMedia(mediaLimit);
@@ -56,10 +89,9 @@ export async function runOnce({ api, rules, options = {}, log = console.log }) {
 
     for (const c of comments) {
       summary.checkedComments++;
-      if (sameUser(c.username, me.username)) continue;
+      if (isOurs(c, me)) continue;
       const rule = matchRule(c.text, rules);
       if (!rule) continue;
-      if ((c.replies?.data ?? []).some((r) => sameUser(r.username, me.username))) continue; // already answered
 
       const at = new Date(c.timestamp);
       if (now - at > REPLY_WINDOW_MS || (ignoreBefore && at < ignoreBefore)) {
@@ -67,34 +99,89 @@ export async function runOnce({ api, rules, options = {}, log = console.log }) {
         continue;
       }
       summary.matched++;
+      if (dryRun && summary.matched === 1) {
+        // Field names only (no values), to confirm what Instagram returns for this account.
+        log(`[dry run] comment fields: ${Object.keys(c).join(",")}; from: ${Object.keys(c.from ?? {}).join(",") || "-"}; reply fields: ${Object.keys(c.replies?.data?.[0] ?? {}).join(",") || "-"}`);
+      }
+
+      const personId = c.from?.id ?? null;
+      const person = personId ?? c.username ?? c.from?.username ?? null;
+      const who = mask(c.username ?? c.from?.username);
+      const tag = `${rule.name}: comment ${c.id} by ${who}`;
+
+      // Check 1: have we already replied under this comment?
+      const replies = c.replies?.data ?? [];
+      if (replies.some((r) => isOurs(r, me))) {
+        summary.alreadyReplied++;
+        if (dryRun) log(`[dry run] ${tag}: already has our reply -> skip`);
+        continue;
+      }
+      if (replies.some((r) => !hasAuthor(r))) {
+        summary.deferred++;
+        summary.errors.push(`${tag}: has a reply whose author Instagram didn't return; not sending`);
+        continue;
+      }
+
       if (actions >= maxActions) { summary.deferred++; continue; }
       actions++;
 
-      const who = `@${c.username ?? "unknown"}`;
+      // Check 2: have we already sent this person this rule's message in DMs?
+      if (historyCheck) {
+        if (!personId) {
+          summary.deferred++;
+          summary.errors.push(`${tag}: Instagram didn't return who wrote it, so DM history can't be checked; not sending`);
+          continue;
+        }
+        let messages = history.get(personId);
+        if (!messages) {
+          try {
+            messages = await api.messagesWith(personId);
+            history.set(personId, messages);
+          } catch (err) {
+            if (err.kind === "auth") throw err;
+            summary.deferred++;
+            summary.errors.push(`${tag}: couldn't read DM history (code ${err.code ?? "?"}: ${err.message}); not sending`);
+            continue;
+          }
+        }
+        if (dryRun && messages.length && !history.shapeLogged) {
+          history.shapeLogged = true;
+          log(`[dry run] message fields: ${Object.keys(messages[0]).join(",")}; from: ${Object.keys(messages[0].from ?? {}).join(",") || "-"}`);
+        }
+        if (dryRun) log(`[dry run] ${tag}: DM thread has ${messages.length} recent message(s), ${messages.filter((m) => isOurs(m, me)).length} from us`);
+        const marker = sentMarker(rule);
+        const got = messages.some((m) => String(m.message ?? "").includes(marker) && (isOurs(m, me) || !hasAuthor(m)));
+        if (got) {
+          summary.alreadyDmed++;
+          log(`${dryRun ? "[dry run] " : ""}${tag}: already got this DM -> skip`);
+          continue;
+        }
+      }
+
       const publicText = pickReply(rule.publicReplies, c.id);
       if (dryRun) {
-        log(`[dry run] ${rule.name}: would DM ${who} and reply "${publicText}" (comment ${c.id}: ${JSON.stringify(c.text)})`);
+        log(`[dry run] ${tag} (${String(c.timestamp).slice(0, 16)}): no reply from us, no earlier DM -> would DM and reply "${publicText}"`);
         continue;
       }
 
       // 1. The DM. One per person per run, even if they commented twice.
-      let dmOk = dmedThisRun.has(c.username);
+      let dmOk = person != null && dmedThisRun.has(person);
       if (!dmOk) {
         try {
           await api.privateReply(c.id, rule.dm);
           dmOk = true;
-          dmedThisRun.add(c.username);
+          if (person != null) dmedThisRun.add(person);
           summary.dmSent++;
         } catch (err) {
           if (err.kind === "auth") throw err;
           if (err.kind === "transient") {
             // Leave the comment unanswered so the next run tries again.
             summary.deferred++;
-            summary.errors.push(`DM to ${who} deferred: ${err.message}`);
+            summary.errors.push(`${tag}: DM deferred: ${err.message}`);
             continue;
           }
-          // Permanent: they can't be DMed (or this comment was already DMed). Say so publicly instead.
-          summary.errors.push(`DM to ${who} failed (code ${err.code ?? "?"}): ${err.message}`);
+          // Permanent: they can't be DMed. Say so publicly instead.
+          summary.errors.push(`${tag}: DM failed (code ${err.code ?? "?"}): ${err.message}`);
         }
       }
 
@@ -107,11 +194,11 @@ export async function runOnce({ api, rules, options = {}, log = console.log }) {
           posted = true;
         } catch (err) {
           if (err.kind === "auth") throw err;
-          if (attempt === 1) summary.errors.push(`public reply to ${who} failed: ${err.message}`);
+          if (attempt === 1) summary.errors.push(`${tag}: public reply failed: ${err.message}`);
         }
       }
       if (posted) dmOk ? summary.replied++ : summary.fallback++;
-      log(`${rule.name}: ${who} -> DM ${dmOk ? "sent" : "FAILED"}, public reply ${posted ? `"${text}"` : "FAILED"}`);
+      log(`${tag}: DM ${dmOk ? "sent" : "FAILED"}, public reply ${posted ? `"${text}"` : "FAILED"}`);
     }
   }
   return summary;

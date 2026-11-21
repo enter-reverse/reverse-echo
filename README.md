@@ -45,7 +45,7 @@ Each run reads the comments on the 25 most recent posts and answers any that mat
 ## Run it
 
 ```sh
-npm test                                   # 15 tests, no network
+npm test                                   # 19 tests, no network
 IG_ACCESS_TOKEN=... npm run dry-run        # shows what it would send, sends nothing
 IG_ACCESS_TOKEN=... npm start              # sends
 ```

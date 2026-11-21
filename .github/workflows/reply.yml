@@ -40,6 +40,9 @@ jobs:
           node-version: 22
       - name: Check rules.json
         run: node src/cli.js --check
+      - name: Check the links in the DMs load (manual runs)
+        if: github.event_name == 'workflow_dispatch'
+        run: node src/cli.js --check --links
       - name: Reply to matching comments
         env:
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}

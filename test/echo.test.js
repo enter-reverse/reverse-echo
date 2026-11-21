@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { containsKeyword, matchRule, validateRules } from "../src/match.js";
-import { runOnce, pickReply } from "../src/engine.js";
+import { runOnce, pickReply, mask, sentMarker } from "../src/engine.js";
 import { InstagramError, classify, createClient } from "../src/instagram.js";
 
 const rules = validateRules(JSON.parse(await readFile(new URL("../rules.json", import.meta.url), "utf8")));
@@ -34,10 +34,14 @@ test("validateRules rejects broken edits with a readable message", () => {
 });
 
 /** A fake Instagram account. `comments` is { mediaId: [comment] }. */
-function fakeApi({ comments, failDm = {}, failReply = {} }) {
+function fakeApi({ comments, failDm = {}, failReply = {}, threads = {}, failHistory = null }) {
   const sent = { dms: [], replies: [] };
   const api = {
-    me: async () => ({ username: "enter.reverse", user_id: "1" }),
+    me: async () => ({ username: "enter.reverse", id: "app-1", user_id: "17841" }),
+    messagesWith: async (userId) => {
+      if (failHistory) throw failHistory;
+      return threads[userId] ?? [];
+    },
     recentMedia: async () => Object.keys(comments).map((id) => ({ id, comments_count: comments[id].length })),
     comments: async (id) => comments[id],
     privateReply: async (commentId, text) => {
@@ -51,7 +55,10 @@ function fakeApi({ comments, failDm = {}, failReply = {} }) {
   };
   return { api, sent };
 }
-const comment = (id, username, text, h = 1, replies = []) => ({ id, username, text, timestamp: hoursAgo(h), replies: { data: replies } });
+const comment = (id, username, text, h = 1, replies = []) => ({
+  id, username, text, timestamp: hoursAgo(h), from: { id: `u_${username}`, username }, replies: { data: replies },
+});
+const GIFT = "https://pass.enterreverse.com/gift";
 const run = (api, options = {}) => runOnce({ api, rules, options: { now: NOW, ...options }, log: () => {} });
 
 test("a TRIAL comment gets the DM and a public reply; other comments are left alone", async () => {
@@ -144,6 +151,57 @@ test("maxActions caps a run and reports the rest as deferred", async () => {
   assert.equal(s.deferred, 3);
 });
 
+test("someone who already got the trial DM gets nothing more: no DM, no public reply", async () => {
+  const { api, sent } = fakeApi({
+    comments: { m1: [comment("c1", "amy", "TRIAL"), comment("c2", "bob", "TRIAL"), comment("c3", "cat", "TRIAL")] },
+    threads: {
+      u_amy: [{ from: { id: "17841" }, message: `Hey! Your trial pass is here ${GIFT} - Zoey` }], // sent by hand earlier
+      u_bob: [{ from: { id: "u_bob", username: "bob" }, message: "trial" }, { from: { username: "enter.reverse" }, message: "Hi! How can we help?" }], // chatted, never got the pass
+    },
+  });
+  const s = await run(api);
+  assert.deepEqual(sent.dms.map((d) => d.commentId), ["c2", "c3"]);
+  assert.deepEqual(sent.replies.map((r) => r.commentId), ["c2", "c3"]);
+  assert.equal(s.alreadyDmed, 1);
+});
+
+test("if DM history can't be read, or Instagram doesn't say who commented, nothing is sent", async () => {
+  const a = fakeApi({
+    comments: { m1: [comment("c1", "amy", "TRIAL")] },
+    failHistory: new InstagramError("nope", { status: 400, code: 100, kind: "permanent" }),
+  });
+  const s1 = await run(a.api);
+  assert.deepEqual(a.sent, { dms: [], replies: [] });
+  assert.equal(s1.deferred, 1);
+
+  const anonymous = { id: "c9", text: "TRIAL", timestamp: hoursAgo(1), replies: { data: [] } };
+  const b = fakeApi({ comments: { m1: [anonymous] } });
+  const s2 = await run(b.api);
+  assert.deepEqual(b.sent, { dms: [], replies: [] });
+  assert.equal(s2.deferred, 1);
+});
+
+test("a reply with no author is treated as possibly ours; our replies are recognised by id as well as name", async () => {
+  const { api, sent } = fakeApi({
+    comments: { m1: [
+      comment("c1", "amy", "TRIAL", 1, [{ id: "r1" }]),
+      comment("c2", "bob", "TRIAL", 1, [{ id: "r2", from: { id: "17841" } }]),
+      comment("c3", "cat", "TRIAL", 1, [{ id: "r3", from: { id: "u_dan", username: "dan" } }]),
+    ] },
+  });
+  const s = await run(api);
+  assert.deepEqual(sent.dms.map((d) => d.commentId), ["c3"]);
+  assert.equal(s.alreadyReplied, 1);
+  assert.equal(s.deferred, 1);
+});
+
+test("names are masked in logs and the marker defaults to the DM's link", () => {
+  assert.equal(mask("amy_tan"), "@am…");
+  assert.equal(mask(undefined), "@?");
+  assert.equal(sentMarker(rules[0]), GIFT);
+  assert.equal(sentMarker({ dm: "no link here, just words that go on", sentMarker: "words" }), "words");
+});
+
 test("pickReply is stable per comment and stays inside the list", () => {
   const list = ["a", "b", "c"];
   assert.equal(pickReply(list, "178"), pickReply(list, "178"));
@@ -166,6 +224,8 @@ test("error classification and the HTTP client's request shapes", async () => {
   await api.privateReply("c9", "hello");
   await api.publicReply("c9", "Sent you a DM!");
   await api.comments("m9");
+  assert.deepEqual(await api.messagesWith("u1"), []);
+  assert.match(calls[3].url, /me\/conversations\?user_id=u1/);
   assert.equal(calls[0].url, "https://graph.instagram.com/v25.0/me/messages");
   assert.deepEqual(JSON.parse(calls[0].body), { recipient: { comment_id: "c9" }, message: { text: "hello" } });
   assert.equal(calls[0].headers.Authorization, "Bearer T");

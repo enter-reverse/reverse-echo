@@ -55,8 +55,8 @@ export function createClient({ token, version = "v25.0", host = "https://graph.i
   }
 
   return {
-    /** The connected account: { username, user_id }. */
-    me: () => call("GET", "me", { query: { fields: "user_id,username" } }),
+    /** The connected account: { id, user_id, username }. */
+    me: () => call("GET", "me", { query: { fields: "id,user_id,username" } }),
 
     /** The account's most recent posts and reels, newest first. */
     async recentMedia(limit) {
@@ -69,9 +69,15 @@ export function createClient({ token, version = "v25.0", host = "https://graph.i
     /** Top-level comments on a media, each with the replies under it. Follows paging up to maxPages. */
     async comments(mediaId, { maxPages = 5 } = {}) {
       const out = [];
-      let page = await call("GET", `${mediaId}/comments`, {
-        query: { fields: "id,text,timestamp,username,replies{id,username,timestamp}", limit: "50" },
-      });
+      const get = (fields) => call("GET", `${mediaId}/comments`, { query: { fields, limit: "50" } });
+      let page;
+      try {
+        page = await get("id,text,timestamp,username,from,replies{id,username,from,timestamp}");
+      } catch (err) {
+        if (err.kind !== "permanent") throw err;
+        // Some accounts reject `from`; fall back to usernames only.
+        page = await get("id,text,timestamp,username,replies{id,username,timestamp}");
+      }
       for (let i = 0; ; i++) {
         out.push(...(page.data ?? []));
         const next = page.paging?.next;
@@ -79,6 +85,34 @@ export function createClient({ token, version = "v25.0", host = "https://graph.i
         page = await call("GET", next);
       }
       return out;
+    },
+
+    /**
+     * The most recent DMs (up to 20) between the account and one person, by their
+     * Instagram-scoped id: [{ from: { id, username }, message, created_time }].
+     * An empty list means there is no conversation with them.
+     */
+    async messagesWith(userId) {
+      const found = await call("GET", "me/conversations", { query: { user_id: String(userId) } });
+      const conversation = found.data?.[0];
+      if (!conversation) return [];
+      const detail = await call("GET", conversation.id, {
+        query: { fields: "messages.limit(20){id,created_time,from,message}" },
+      });
+      const list = (detail.messages?.data ?? []).slice(0, 20);
+      // If the API returned bare ids, fetch each message's details.
+      if (list.length && list.every((m) => m.message === undefined && m.from === undefined)) {
+        const out = [];
+        for (const m of list) {
+          try {
+            out.push(await call("GET", m.id, { query: { fields: "id,created_time,from,message" } }));
+          } catch (err) {
+            if (err.kind !== "permanent") throw err; // older than the 20 Instagram lets us read
+          }
+        }
+        return out;
+      }
+      return list;
     },
 
     /** DM the person who wrote a comment. Instagram allows one per comment, within 7 days of it. */

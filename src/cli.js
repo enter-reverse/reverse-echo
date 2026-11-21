@@ -4,6 +4,7 @@
 //   IG_ACCESS_TOKEN   (required) long-lived Instagram User access token for the account
 //   DRY_RUN=1         log what would be sent, send nothing
 //   IGNORE_BEFORE     ISO time; comments older than this are never answered (set to go-live time)
+//   HISTORY_CHECK=0   skip reading the DM thread before sending (not recommended)
 //   MEDIA_LIMIT       how many recent posts to check (default 25)
 //   MAX_ACTIONS       cap on comments answered per run (default 40)
 //   IG_API_VERSION    default v25.0
@@ -21,6 +22,24 @@ try {
 
   if (process.argv.includes("--check")) {
     console.log(`rules.json is valid: ${rules.map((r) => `${r.name} [${r.keywords.join(", ")}]`).join("; ")}`);
+    if (process.argv.includes("--links")) {
+      // Open every link in every DM, so a dead or mistyped link is caught before customers get it.
+      let bad = 0;
+      for (const rule of rules) {
+        for (const url of rule.dm.match(/https?:\/\/[^\s]+/g) ?? []) {
+          try {
+            const res = await fetch(url, { redirect: "follow", headers: { "User-Agent": "Mozilla/5.0 (reverse-echo link check)" } });
+            const title = (await res.text()).match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.trim() ?? "";
+            console.log(`link ${url} -> HTTP ${res.status}, lands on ${res.url}${title ? `, title "${title}"` : ""}`);
+            if (!res.ok) bad++;
+          } catch (err) {
+            console.log(`link ${url} -> FAILED: ${err.message}`);
+            bad++;
+          }
+        }
+      }
+      if (bad) { console.error(`${bad} link(s) in rules.json did not load`); process.exit(1); }
+    }
     process.exit(0);
   }
 
@@ -39,6 +58,7 @@ try {
       mediaLimit: Number(env.MEDIA_LIMIT) || 25,
       maxActions: Number(env.MAX_ACTIONS) || 40,
       ignoreBefore,
+      historyCheck: !(env.HISTORY_CHECK === "0" || env.HISTORY_CHECK === "false"),
     },
   });
 

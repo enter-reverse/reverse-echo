@@ -4,7 +4,9 @@ import { readFile } from "node:fs/promises";
 import { INBOX, firstName, followup1, kindOf, tpl } from "../src/templates.js";
 import { tick } from "../src/cx.js";
 import { createChatwoot } from "../src/chatwoot.js";
-import { run } from "../src/index.js";
+import worker, { run } from "../src/index.js";
+import { buyerKeys, markPaid, verify } from "../src/shopify.js";
+import { createHmac } from "node:crypto";
 
 // What the original Python watcher (cx-watch/autoreply.py) itself produces.
 const golden = JSON.parse(await readFile(new URL("./golden.json", import.meta.url), "utf8"));
@@ -168,4 +170,36 @@ test("the Worker stays in dry run unless told otherwise, and talks to Chatwoot t
   assert.equal(posts[0].headers.api_access_token, "tok");
   assert.deepEqual(JSON.parse(posts[1].body), { labels: ["vip", "claim"] });
   assert.throws(() => createChatwoot({ token: "", account: "" }), /CW_TOKEN/);
+});
+
+test("a paid Shopify order labels the buyer's chats, matching only an exact phone or email", async () => {
+  const order = { email: "Amy@Example.com", phone: "+65 8123 4567", customer: { phone: "81234567" } };
+  assert.deepEqual(buyerKeys(order), { phones: ["81234567"], emails: ["amy@example.com"] });
+  const labels = {};
+  const api = {
+    searchContacts: async (q) => q === "81234567"
+      ? [{ id: 1, phone_number: "+6581234567" }, { id: 2, phone_number: "+6599981234" }]
+      : [{ id: 1, email: "amy@example.com" }, { id: 3, email: "amy@example.com.sg" }],
+    contactConversations: async (id) => (id === 1 ? [{ id: 10, labels: ["claim"] }, { id: 11, labels: ["paid"] }] : [{ id: 99, labels: [] }]),
+    addLabels: async (cid, l) => { labels[cid] = l; },
+  };
+  const r = await markPaid({ api, order, log: () => {} });
+  assert.deepEqual(labels, { 10: ["paid"] });
+  assert.deepEqual(r, { matchedContacts: 1, labelled: 1 });
+});
+
+test("the Shopify address only accepts requests signed with the secret", async () => {
+  const body = JSON.stringify({ email: "x@y.z" });
+  const secret = "s3cret";
+  const good = createHmac("sha256", secret).update(body).digest("base64");
+  assert.equal(await verify(body, good, secret), true);
+  assert.equal(await verify(body + " ", good, secret), false);
+  assert.equal(await verify(body, good, "other"), false);
+  const env = { SHOPIFY_WEBHOOK_SECRET: secret, CW_TOKEN: "t", CW_ACC: "1", DRY_RUN: "1" };
+  const ctx = { waitUntil: (p) => p.catch(() => {}) };
+  const post = (headers) => worker.fetch(new Request("https://x/shopify", { method: "POST", body, headers }), env, ctx);
+  assert.equal((await post({ "X-Shopify-Hmac-Sha256": "wrong" })).status, 401);
+  assert.equal((await post({})).status, 401);
+  assert.equal((await worker.fetch(new Request("https://x/shopify", { method: "POST", body }), { ...env, SHOPIFY_WEBHOOK_SECRET: "" }, ctx)).status, 503);
+  assert.equal((await worker.fetch(new Request("https://x/"), env, ctx)).status, 200);
 });

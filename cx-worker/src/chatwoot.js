@@ -38,6 +38,13 @@ export function createChatwoot({ token, account, host = "https://app.chatwoot.co
     async messages(cid) {
       return publicOnly((await call("GET", `/conversations/${cid}/messages`)).payload).sort((a, b) => a.created_at - b.created_at);
     },
+    /** Contacts matching a phone number or email (Chatwoot's search is fuzzy; callers must check the match). */
+    async searchContacts(q) {
+      return (await call("GET", `/contacts/search?q=${encodeURIComponent(q)}`)).payload ?? [];
+    },
+    async contactConversations(contactId) {
+      return (await call("GET", `/contacts/${contactId}/conversations`)).payload ?? [];
+    },
     send: (cid, content) => call("POST", `/conversations/${cid}/messages`, { content, message_type: "outgoing", private: false }),
     /** Adds labels, keeping the ones already there. */
     async addLabels(cid, labels) {

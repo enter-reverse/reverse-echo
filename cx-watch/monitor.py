@@ -20,7 +20,7 @@ NOISE = ("noreply", "no-reply", "no_reply", "classpass", "intercom", "loops.so",
          "youform", "shopify", "apple.com", "spotify", "google.com", "notifications", "mailer",
          "reallygoodemails", "paddle.com", "newsletter", "news@", "updates@", "info@")
 
-TEAM = {158}  # internal chats (Andre)
+TEAM = {158, 410}  # internal chats (Andre; 410 = the user, for alerts)
 
 def get(p):
     r = urllib.request.Request(B + p, headers={"api_access_token": env["CW_TOKEN"]})
@@ -49,15 +49,20 @@ while True:
             for m in ms:
                 if m["message_type"] == 0 and m["created_at"] > SINCE and m["id"] not in state["seen"]:
                     state["seen"].append(m["id"])
+                    # TRIAL and website claims: Cloudflare (reverse-echo cx-worker) is the only sender now
+                    # (the user, 22 Nov 00:49). Track the claim for follow-ups, say nothing, send nothing.
+                    if autoreply.kind_of(m.get("content"), c["inbox_id"]):
+                        dashboard.add_claim(cid)
+                        continue
                     events.append(f"NEW {cid} {name} {t(m['created_at'])} | {(m.get('content') or '[attachment]')[:250].replace(chr(10), ' ')}")
-                    try:
-                        auto = autoreply.maybe_reply(cid, c["inbox_id"], name, m, ms)
-                    except Exception as e:
-                        auto = f"AUTO-SEND FAILED {cid} {name}: {e}"
-                    if auto:
-                        events.append(auto)
-                        ms = [x for x in get(f"/conversations/{cid}/messages")["payload"] if x["message_type"] in (0, 1) and not x.get("private")]
-                    if autoreply.kind_of(m.get("content"), c["inbox_id"]): dashboard.add_claim(cid)
+            # a TRIAL or claim Cloudflare still hasn't answered after 5 minutes: flag it
+            for i, m in enumerate(ms):
+                if m["message_type"] != 0 or not autoreply.kind_of(m.get("content"), c["inbox_id"]): continue
+                if any(x["message_type"] == 1 for x in ms[i+1:]): continue
+                age = time.time() - m["created_at"]
+                if 300 < age < 6 * 3600 and m["id"] not in state.setdefault("noauto", []):
+                    state["noauto"].append(m["id"])
+                    events.append(f"NO AUTO-REPLY 5+ min {cid} {name} since {t(m['created_at'])}: Cloudflare hasn't answered | {(m.get('content') or '')[:150].replace(chr(10), ' ')}")
             # oldest customer message that is still waiting (no reply from us after it)
             waiting = None
             for m in ms:
@@ -71,6 +76,7 @@ while True:
                 prev_cust = i > 0 and ms[i-1]["message_type"] == 0
                 if rep and key not in state["answered"] and not prev_cust:
                     state["answered"].append(key)
+                    if autoreply.kind_of(m.get("content"), c["inbox_id"]): continue  # Cloudflare's auto-reply: no news
                     mins = round((rep["created_at"] - m["created_at"]) / 60)
                     events.append(f"REPLIED {cid} {name}: customer {t(m['created_at'])}, us {t(rep['created_at'])} ({mins} min, {'on time' if mins <= 10 else 'LATE'}) | {(rep.get('content') or '')[:150].replace(chr(10), ' ')}")
             # pings at 10 and 20 min unanswered (the user, 21 Nov 6:47pm: "ping if I forget to reply ... 10 minutes or 20 minutes")

@@ -31,8 +31,8 @@ export function createChatwoot({ token, account, host = "https://app.chatwoot.co
       return (await call("GET", `/conversations?status=${status}&assignee_type=all&page=1`)).data?.payload ?? [];
     },
     /** Conversations carrying a label, any status. */
-    async labelled(label) {
-      return (await call("GET", `/conversations?status=all&assignee_type=all&labels[]=${encodeURIComponent(label)}&page=1`)).data?.payload ?? [];
+    async labelled(label, page = 1) {
+      return (await call("GET", `/conversations?status=all&assignee_type=all&labels[]=${encodeURIComponent(label)}&page=${page}`)).data?.payload ?? [];
     },
     /** The latest public messages of a conversation, oldest first: 0 = from the customer, 1 = from us. */
     async messages(cid) {
@@ -46,6 +46,12 @@ export function createChatwoot({ token, account, host = "https://app.chatwoot.co
       return (await call("GET", `/contacts/${contactId}/conversations`)).payload ?? [];
     },
     send: (cid, content) => call("POST", `/conversations/${cid}/messages`, { content, message_type: "outgoing", private: false }),
+    /** A Meta-approved WhatsApp template, which may be sent after the 24-hour window. `content` is what Chatwoot shows. */
+    sendTemplate: (cid, { name, language = "en", category = "MARKETING", body, content }) =>
+      call("POST", `/conversations/${cid}/messages`, {
+        content, message_type: "outgoing", private: false,
+        template_params: { name, category, language, processed_params: { body } },
+      }),
     /** Adds labels, keeping the ones already there. */
     async addLabels(cid, labels) {
       const have = (await call("GET", `/conversations/${cid}/labels`)).payload ?? [];

@@ -6,11 +6,14 @@
 // 2. The day-1 follow-up: a WhatsApp claimer who has gone quiet gets one approved line
 //    before WhatsApp's 24-hour window closes.
 //
+// 3. Days 3 and 5: the same quiet claimer gets a Meta-approved template (an invite to see the
+//    space, then a last note), each once, in the day after it falls due and only in the daytime.
+//
 // There is no database. Chatwoot is the record: labels mark what a conversation is
-// ("claim", "trial", "duo") and what has been done ("fu1"), and people can steer it with
+// ("claim", "trial", "duo") and what has been done ("fu1", "fu3", "fu5"), and people can steer it with
 // "paid" and "no-followup".
 
-import { INBOX, FOLLOWUP1_MARKER, firstName, followup1, kindOf, tpl } from "./templates.js";
+import { INBOX, FOLLOWUP1_MARKER, TEMPLATES, firstName, followup1, kindOf, tpl } from "./templates.js";
 
 const HOUR = 3600;
 const DAY = 24 * HOUR;
@@ -26,13 +29,14 @@ const sender = (c) => c.meta?.sender ?? {};
  * @param {object} deps.options
  * @param {boolean} deps.options.dryRun      log what would be sent, send nothing (default true)
  * @param {boolean} deps.options.followups   run the day-1 follow-ups (default false)
+ * @param {object}  [deps.options.templates] { day3: bool, day5: bool, language } - which template follow-ups to run (default none)
  * @param {number}  deps.options.now         unix seconds
  * @param {number}  [deps.options.freshSecs] only auto-reply to messages newer than this (default 15 min)
  * @param {number}  [deps.options.minAgeSecs] and older than this (default 0: answer on the next pass)
  */
 export async function tick({ api, options = {}, log = console.log }) {
-  const { dryRun = true, followups = false, now = Math.floor(Date.now() / 1000), freshSecs = 15 * 60, minAgeSecs = 0, maxThreads = 15, maxSends = 5 } = options;
-  const summary = { checked: 0, autoSent: 0, followupsSent: 0, skipped: 0, errors: [] };
+  const { dryRun = true, followups = false, templates = {}, now = Math.floor(Date.now() / 1000), freshSecs = 15 * 60, minAgeSecs = 0, maxThreads = 15, maxSends = 5 } = options;
+  const summary = { checked: 0, autoSent: 0, followupsSent: 0, templatesSent: 0, skipped: 0, errors: [] };
   const tag = dryRun ? "[dry run] " : "";
   let threads = 0;
   let sends = 0;
@@ -109,6 +113,58 @@ export async function tick({ api, options = {}, log = console.log }) {
         await api.addLabels(c.id, ["fu1"]).catch((e) => summary.errors.push(`labels on ${c.id}: ${e.message}`));
       } catch (err) {
         summary.errors.push(`follow-up ${c.id}: ${err.message}`);
+      }
+    }
+  }
+  // ---- 3. days 3 and 5 (templates) -------------------------------------------------
+  const steps = [["day3", 3], ["day5", 5]].filter(([k]) => templates[k]);
+  // Singapore daytime only: nobody wants a marketing message at 3am.
+  const sgtHour = Math.floor(((now + 8 * HOUR) % DAY) / HOUR);
+  if (steps.length && sgtHour >= 10 && sgtHour < 20) {
+    const claims = [];
+    try {
+      // Claims three to six days old sit past the first page, which holds the 25 most recently active.
+      for (let page = 1; page <= 4; page++) {
+        const got = await api.labelled("claim", page);
+        claims.push(...got);
+        if (got.length < 25) break;
+      }
+    } catch (err) { summary.errors.push(`claims list: ${err.message}`); }
+    let read = 0;
+    for (const c of claims) {
+      const labels = new Set(c.labels ?? []);
+      if (c.inbox_id !== INBOX.waCx || labels.has("paid") || labels.has("no-followup")) continue;
+      // Quiet for a day (inside 24 hours a person can still write freely) and not older than the last step's day.
+      const idle = now - (c.last_activity_at ?? now);
+      if (idle < DAY || idle > 6 * DAY) continue;
+      const open = steps.filter(([k]) => !labels.has(TEMPLATES[k].label) && !(k === "day5" && labels.has("duo"))); // day 5 names the $100 off, which isn't the Duo offer
+      if (!open.length) continue;
+      if (read >= 12 || sends >= maxSends) { summary.skipped++; continue; }
+      read++;
+      try {
+        const ms = await api.messages(c.id);
+        const theirs = ms.filter((m) => m.message_type === 0);
+        const ours = ms.filter((m) => m.message_type === 1);
+        if (!theirs.length || !ours.length) continue;
+        if (ms[ms.length - 1].message_type === 0) continue; // they wrote last: that needs an answer, not a nudge
+        const claimedAt = theirs[0].created_at;
+        const age = now - claimedAt;
+        // Each step is sent only in the day after it falls due, so switching this on never reaches back to old claims.
+        const step = open.find(([, d]) => age >= d * DAY && age < (d + 1) * DAY);
+        if (!step) continue;
+        const t = TEMPLATES[step[0]];
+        // One template a day at most, and never on top of something we sent in the last 20 hours.
+        if (now - ours[ours.length - 1].created_at < 20 * HOUR) continue;
+        const name = firstName(sender(c).name);
+        if (!name) { log(`no usable first name in conversation ${c.id}: ${step[0]} template left to a person`); continue; }
+        sends++;
+        if (dryRun) { log(`${tag}would send the ${step[0]} template in conversation ${c.id}`); continue; }
+        await api.sendTemplate(c.id, { name: t.name, language: templates.language || "en", body: { 1: name }, content: t.text(name) });
+        summary.templatesSent++;
+        log(`FOLLOW-UP ${step[0]} template sent in conversation ${c.id}`);
+        await api.addLabels(c.id, [t.label]).catch((e) => summary.errors.push(`labels on ${c.id}: ${e.message}`));
+      } catch (err) {
+        summary.errors.push(`template follow-up ${c.id}: ${err.message}`);
       }
     }
   }

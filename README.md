@@ -55,7 +55,7 @@ Logs are public because the repo is public, so usernames are masked (`@ab…`) a
 ## Run it
 
 ```sh
-npm test                                   # 34 tests, no network
+npm test                                   # 36 tests, no network
 IG_ACCESS_TOKEN=... npm run dry-run        # shows what it would send, sends nothing
 IG_ACCESS_TOKEN=... npm start              # sends
 ```
@@ -87,6 +87,8 @@ A second Worker that does the two things in customer chats that are pure templat
 - **Day-1 follow-up** (off until `FOLLOWUPS = "on"`). A WhatsApp claimer who has gone quiet gets the approved line about 20 hours in, before WhatsApp's 24-hour window closes. Skipped if they wrote last, if we already followed up, or if the conversation is labelled `paid`, `no-followup` or `duo`.
 
 It keeps no database. Chatwoot labels are the record: `claim`, `trial`, `duo` say what a conversation is, `fu1` that the day-1 follow-up went, and a person can add `paid` or `no-followup` to stop it. Everything that needs judgment (drafting replies, the 10 and 20 minute pings, days 3 and 5, the CX Board) stays with the CX chat.
+
+- **Paid labels from Shopify.** Shopify's "Order payment" webhook posts to this Worker at `/shopify`. The Worker checks the signature against `SHOPIFY_WEBHOOK_SECRET`, finds the buyer's Chatwoot contacts by exact email or by the last 8 digits of their phone, and labels their conversations `paid`. A buyer who paid with a different phone and email from the one they chatted on is not matched; label those by hand.
 
 It uses the `CHATWOOT_TOKEN` and `CHATWOOT_ACCOUNT_ID` Actions secrets, copied into the Worker on every deploy. To pause it, set `DRY_RUN = "1"` in `cx-worker/wrangler.toml` and merge. Turn `FOLLOWUPS` on only once paying customers are reliably being labelled `paid`.
 

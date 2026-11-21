@@ -11,8 +11,8 @@ workspace; change them to run it elsewhere.
 
 | File | What it does |
 | --- | --- |
-| `monitor.py` | Polls Chatwoot every 30 seconds and exits with a line per event: a new customer message, our reply (and how long it took), a chat unanswered at 10 and again at 20 minutes, and a claim follow-up that is due (day 1, 3 or 5, with day 1 pulled forward so it lands inside WhatsApp's 24-hour window). It skips the Joo Chiat store's WhatsApp and newsletter or receipt emails. |
-| `autoreply.py` | The reply templates and the sender. Fresh website claims (HBOT, Red Light, Contrast, Dry Float, Duo) and "TRIAL" messages get their template at once; `send_and_check` sends and reads back delivery. |
+| `monitor.py` | Polls Chatwoot every 30 seconds and exits with a line per event: a new customer message, our reply (and how long it took), a chat unanswered at 10 and again at 20 minutes, and a claim follow-up that is due (day 1, 3 or 5, with day 1 pulled forward so it lands inside WhatsApp's 24-hour window). It skips the Joo Chiat store's WhatsApp and newsletter or receipt emails. TRIAL and website-claim messages are only tracked for follow-ups: `cx-worker` answers them, and the watcher flags any it still hasn't answered after 5 minutes. |
+| `autoreply.py` | `kind_of` (spots a TRIAL or claim message) and `send_and_check` (sends and reads back delivery), used by the other scripts. Its templates are no longer sent from here: since 22 Nov, `cx-worker` on Cloudflare is the only sender of the TRIAL and claim replies. |
 | `safe_send.py` | Sends a reply to a question the CX playbook already settles, after a 3-minute hold, only if nobody on the team replied and the customer added nothing. Every outcome is logged. |
 | `dashboard.py` | Builds the CX Board's data: chats waiting on us, and each claimer's follow-up stage. |
 | `slots.sql` | Free slots per room for a day, from the Mindbody bookings Olympus keeps (the hourly copy plus live webhooks). Run it in Olympus with `:DAY` replaced by a date. |

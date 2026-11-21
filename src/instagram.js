@@ -23,7 +23,7 @@ export function classify(status, code) {
   return "permanent";
 }
 
-export function createClient({ token, version = "v25.0", host = "https://graph.instagram.com", fetchImpl = fetch }) {
+export function createClient({ token, version = "v25.0", host = "https://graph.instagram.com", fetchImpl = fetch, paceMs = 600 }) {
   if (!token) throw new Error("IG_ACCESS_TOKEN is not set");
   const base = `${host}/${version}`;
 
@@ -54,6 +54,14 @@ export function createClient({ token, version = "v25.0", host = "https://graph.i
     return json;
   }
 
+  // The Conversations API allows 2 calls a second per account; leave a gap between them.
+  let lastPaced = 0;
+  async function pace() {
+    const wait = lastPaced + paceMs - Date.now();
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    lastPaced = Date.now();
+  }
+
   return {
     /** The connected account: { id, user_id, username }. */
     me: () => call("GET", "me", { query: { fields: "id,user_id,username" } }),
@@ -66,22 +74,26 @@ export function createClient({ token, version = "v25.0", host = "https://graph.i
       return page.data ?? [];
     },
 
-    /** Top-level comments on a media, each with the replies under it. Follows paging up to maxPages. */
-    async comments(mediaId, { maxPages = 5 } = {}) {
+    /**
+     * Top-level comments on a media, each with the replies under it.
+     * Follows paging until `stopWhen(page)` says the rest is not needed, up to maxPages.
+     */
+    async comments(mediaId, { maxPages = 20, stopWhen = () => false } = {}) {
       const out = [];
       const get = (fields) => call("GET", `${mediaId}/comments`, { query: { fields, limit: "50" } });
       let page;
       try {
-        page = await get("id,text,timestamp,username,from,replies{id,username,from,timestamp}");
+        // `user` is how Instagram marks comments written by the connected account itself.
+        page = await get("id,text,timestamp,username,from,user,replies{id,username,from,user,timestamp}");
       } catch (err) {
         if (err.kind !== "permanent") throw err;
-        // Some accounts reject `from`; fall back to usernames only.
         page = await get("id,text,timestamp,username,replies{id,username,timestamp}");
       }
       for (let i = 0; ; i++) {
-        out.push(...(page.data ?? []));
+        const data = page.data ?? [];
+        out.push(...data);
         const next = page.paging?.next;
-        if (!next || i + 1 >= maxPages) break;
+        if (!next || i + 1 >= maxPages || stopWhen(data)) break;
         page = await call("GET", next);
       }
       return out;
@@ -89,9 +101,14 @@ export function createClient({ token, version = "v25.0", host = "https://graph.i
 
     /** The replies under one comment, with who wrote each. (The nested list on `comments` comes back without authors.) */
     async replies(commentId) {
-      const page = await call("GET", `${commentId}/replies`, {
-        query: { fields: "id,text,timestamp,username,from", limit: "50" },
-      });
+      const get = (fields) => call("GET", `${commentId}/replies`, { query: { fields, limit: "50" } });
+      let page;
+      try {
+        page = await get("id,text,timestamp,username,from,user");
+      } catch (err) {
+        if (err.kind !== "permanent") throw err;
+        page = await get("id,text,timestamp,username,from");
+      }
       return page.data ?? [];
     },
 
@@ -101,9 +118,11 @@ export function createClient({ token, version = "v25.0", host = "https://graph.i
      * An empty list means there is no conversation with them.
      */
     async messagesWith(userId) {
+      await pace();
       const found = await call("GET", "me/conversations", { query: { user_id: String(userId) } });
       const conversation = found.data?.[0];
       if (!conversation) return [];
+      await pace();
       const detail = await call("GET", conversation.id, {
         query: { fields: "messages.limit(20){id,created_time,from,message}" },
       });
@@ -113,6 +132,7 @@ export function createClient({ token, version = "v25.0", host = "https://graph.i
         const out = [];
         for (const m of list) {
           try {
+            await pace();
             out.push(await call("GET", m.id, { query: { fields: "id,created_time,from,message" } }));
           } catch (err) {
             if (err.kind !== "permanent") throw err; // older than the 20 Instagram lets us read

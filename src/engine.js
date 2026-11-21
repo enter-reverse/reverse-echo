@@ -19,15 +19,16 @@ const same = (a, b) => a != null && b != null && String(a).toLowerCase() === Str
 
 /** Is this comment, reply or message written by the connected account? */
 export function isOurs(item, me) {
-  const id = item?.from?.id;
+  // `user` is only returned on comments the connected account wrote itself.
+  const ids = [item?.from?.id, item?.user?.id, typeof item?.user === "object" ? null : item?.user].filter((x) => x != null);
   return (
     same(item?.username, me.username) ||
     same(item?.from?.username, me.username) ||
-    (id != null && (same(id, me.id) || same(id, me.user_id)))
+    ids.some((id) => same(id, me.id) || same(id, me.user_id))
   );
 }
 
-const hasAuthor = (item) => item?.username != null || item?.from?.id != null || item?.from?.username != null;
+const hasAuthor = (item) => item?.username != null || item?.from?.id != null || item?.from?.username != null || item?.user != null;
 
 /** What identifies "this rule's message" in a DM thread: `sentMarker`, else the first link in the DM, else its opening words. */
 export function sentMarker(rule) {
@@ -86,6 +87,25 @@ export async function runOnce({ api, rules, options = {}, log = console.log }) {
       continue;
     }
     summary.checkedMedia++;
+    if (diagnose) {
+      const times = comments.map((c) => Date.parse(c.timestamp));
+      const desc = times.every((t, i) => i === 0 || t <= times[i - 1]);
+      const asc = times.every((t, i) => i === 0 || t >= times[i - 1]);
+      const tally = { user: 0, from: 0, username: 0, none: 0, withReplies: 0 };
+      for (const c of comments) {
+        if (c.user != null) tally.user++; else if (c.from) tally.from++; else if (c.username) tally.username++; else tally.none++;
+        if (c.replies?.data?.length) tally.withReplies++;
+      }
+      log(`[diagnose] media ${item.id}: ${comments.length} top-level of ${item.comments_count} total, order ${desc ? (asc ? "single/empty" : "newest first") : asc ? "OLDEST FIRST" : "MIXED"}; authors: user=${tally.user} from=${tally.from} username=${tally.username} none=${tally.none}; with replies=${tally.withReplies}`);
+      for (const c of comments.filter((x) => x.replies?.data?.length).slice(0, 4)) {
+        try {
+          const rs = await api.replies(c.id);
+          log(`[diagnose]   replies under ${c.id}: ${rs.map((r) => (r.user != null ? `user(${isOurs(r, me) ? "ours" : "not-ours"})` : r.from || r.username ? `from(${isOurs(r, me) ? "ours" : "other"})` : "no-author")).join(",")}`);
+        } catch (err) {
+          log(`[diagnose]   replies under ${c.id}: failed ${err.message}`);
+        }
+      }
+    }
 
     for (const c of comments) {
       summary.checkedComments++;

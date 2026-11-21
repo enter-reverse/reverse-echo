@@ -29,9 +29,13 @@ try {
         for (const url of rule.dm.match(/https?:\/\/[^\s]+/g) ?? []) {
           try {
             const res = await fetch(url, { redirect: "follow", headers: { "User-Agent": "Mozilla/5.0 (reverse-echo link check)" } });
-            const title = (await res.text()).match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.trim() ?? "";
-            console.log(`link ${url} -> HTTP ${res.status}, lands on ${res.url}${title ? `, title "${title}"` : ""}`);
-            if (!res.ok) bad++;
+            const landed = new URL(res.url);
+            const where = `${landed.host}${landed.pathname.split("/").slice(0, 3).join("/")}`; // no query: it can hold session tokens
+            // 401/403/429 mean the site answered but won't show the page to a script (e.g. Shopify checkout). Not a dead link.
+            const blocked = [401, 403, 429].includes(res.status);
+            const dead = !res.ok && !blocked;
+            console.log(`link ${url} -> HTTP ${res.status}, lands on ${where}${blocked ? " (reached, but the page is hidden from scripts; open it by hand to check the offer)" : ""}`);
+            if (dead) bad++;
           } catch (err) {
             console.log(`link ${url} -> FAILED: ${err.message}`);
             bad++;

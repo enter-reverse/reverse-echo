@@ -285,3 +285,28 @@ test("error classification and the HTTP client's request shapes", async () => {
   assert.match(calls[2].url, /m9\/comments\?fields=.*replies/);
   await assert.rejects(api.publicReply("bad", "x").catch((e) => { assert.equal(e.kind, "auth"); throw e; }), /nope/);
 });
+
+test("the Cloudflare Worker runs the same pass, and stays in dry run unless told otherwise", async () => {
+  const { pass } = await import("../worker/src/index.js");
+  const calls = [];
+  const fetchImpl = async (url, init = {}) => {
+    const u = new URL(url);
+    calls.push(`${init.method ?? "GET"} ${u.pathname}`);
+    const body = u.pathname.endsWith("/me") ? { id: "app-1", user_id: "17841", username: "enter.reverse" }
+      : u.pathname.endsWith("/me/media") ? { data: [{ id: "m1", comments_count: 1 }] }
+      : u.pathname.endsWith("/m1/comments") ? { data: [{ id: "c1", text: "TRIAL", timestamp: new Date().toISOString(), from: { id: "u1", username: "amy" } }] }
+      : u.pathname.endsWith("/me/conversations") ? { data: [] }
+      : { id: "x" };
+    return new Response(JSON.stringify(body), { status: 200 });
+  };
+  const quiet = () => {};
+  for (const env of [{ IG_ACCESS_TOKEN: "T" }, { IG_ACCESS_TOKEN: "T", DRY_RUN: "1" }]) {
+    const s = await pass(env, { fetchImpl, log: quiet });
+    assert.equal(s.matched, 1);
+    assert.equal(s.dmSent, 0);
+  }
+  assert.ok(!calls.some((c) => c.startsWith("POST")), "dry run must not send");
+  const live = await pass({ IG_ACCESS_TOKEN: "T", DRY_RUN: "0" }, { fetchImpl, log: quiet });
+  assert.equal(live.dmSent, 1);
+  assert.deepEqual(calls.filter((c) => c.startsWith("POST")), ["POST /v25.0/me/messages", "POST /v25.0/c1/replies"]);
+});

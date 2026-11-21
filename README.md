@@ -55,7 +55,7 @@ Logs are public because the repo is public, so usernames are masked (`@ab…`) a
 ## Run it
 
 ```sh
-npm test                                   # 23 tests, no network
+npm test                                   # 33 tests, no network
 IG_ACCESS_TOKEN=... npm run dry-run        # shows what it would send, sends nothing
 IG_ACCESS_TOKEN=... npm start              # sends
 ```
@@ -72,6 +72,28 @@ Settings (environment): `IG_ACCESS_TOKEN` (required), `DRY_RUN`, `DIAGNOSE`, `HI
 ## Where it runs
 
 GitHub Actions, `.github/workflows/reply.yml`, every 5 minutes (GitHub often starts scheduled runs late, so expect 5 to 15 minutes from comment to DM). A daily `keepalive` job re-enables the workflow, because GitHub switches off schedules in public repos after 60 days without a commit. The schedule only runs while the repo is public; the reason is in the workflow's header comment. Actions → reply → Run workflow does a pass by hand, with a dry-run tick box and a diagnose option.
+
+## Running on Cloudflare instead (built, not switched on)
+
+GitHub's timer did not fire once on this repo in its first hours, so the same pass is also packaged as a Cloudflare Worker (`worker/`), which Cloudflare starts every minute. It is not live until someone connects a Cloudflare account:
+
+1. Create a free Cloudflare account.
+2. Add one Actions secret to this repo: `CLOUDFLARE_API_TOKEN` (a token made from Cloudflare's "Edit Cloudflare Workers" template). The account id is already in each `wrangler.toml`.
+3. Run Actions → deploy-worker. It deploys the Worker in dry-run mode and copies `IG_ACCESS_TOKEN` across.
+4. Read the Worker's logs for a few minutes, then set `DRY_RUN = "0"` in `worker/wrangler.toml` to go live, and in the same change remove the `schedule:` block from `reply.yml`, so the two timers never both send.
+
+The free plan allows 50 outgoing calls per run, so each pass is capped (20 posts, 6 DM-thread reads, 5 sends); anything over that is handled a minute later.
+
+## The CX watcher (`cx-worker/`, built, not switched on)
+
+A second Worker that does the two things in customer chats that are pure templates, around the clock. It is a port of the watcher that ran inside the CX chat (`cx-watch/`), and its tests check every template against that script's own output.
+
+- **Auto-replies.** A message that is just "TRIAL", or a claim from the website's WhatsApp button (HBOT, Red Light, Contrast, Dry Float, Duo), gets its reply within a minute, but only in a conversation we have never written in, and only if the message is under 15 minutes old.
+- **Day-1 follow-up** (off until `FOLLOWUPS = "on"`). A WhatsApp claimer who has gone quiet gets the approved line about 20 hours in, before WhatsApp's 24-hour window closes. Skipped if they wrote last, if we already followed up, or if the conversation is labelled `paid`, `no-followup` or `duo`.
+
+It keeps no database. Chatwoot labels are the record: `claim`, `trial`, `duo` say what a conversation is, `fu1` that the day-1 follow-up went, and a person can add `paid` or `no-followup` to stop it. Everything that needs judgment (drafting replies, the 10 and 20 minute pings, days 3 and 5, the CX Board) stays with the CX chat.
+
+To switch it on: add the `CHATWOOT_TOKEN` and `CHATWOOT_ACCOUNT_ID` Actions secrets, run deploy-worker, read the Worker's logs in dry run, then set `DRY_RUN = "0"` in `cx-worker/wrangler.toml`. **In the same step, the CX chat's own watcher must stop auto-replying**, or both could answer the same customer. Turn `FOLLOWUPS` on only once paying customers are reliably being labelled `paid`.
 
 ## What would stop it
 

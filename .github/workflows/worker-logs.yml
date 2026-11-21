@@ -1,0 +1,36 @@
+# Shows what a Worker is doing right now: listens to its live log for a short
+# while and prints it. Run by hand: Actions -> worker-logs -> Run workflow.
+# Echo logs one summary line per run; usernames are masked and no message text is logged.
+
+name: worker-logs
+on:
+  workflow_dispatch:
+    inputs:
+      worker:
+        description: "Which Worker"
+        type: choice
+        options: [worker, cx-worker]
+        default: worker
+      seconds:
+        description: "How long to listen"
+        type: string
+        default: "130"
+
+permissions:
+  contents: read
+
+jobs:
+  tail:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Listen to the Worker's log
+        working-directory: ${{ inputs.worker }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          SECONDS_TO_LISTEN: ${{ inputs.seconds }}
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo "::error::CLOUDFLARE_API_TOKEN is not set"; exit 1; }
+          case "$SECONDS_TO_LISTEN" in ''|*[!0-9]*) SECONDS_TO_LISTEN=130;; esac
+          timeout "$SECONDS_TO_LISTEN" npx --yes wrangler@4 tail --format pretty || true

@@ -1,0 +1,23 @@
+# The hosted CX watcher: instant TRIAL and claim replies, and the day-1 follow-up.
+name = "reverse-cx"
+main = "src/index.js"
+compatibility_date = "2026-11-01"
+# The Reverse Cloudflare account. An account id is an address, not a password.
+account_id = "7fae655d2b641cfe15a087237ef43b19"
+# Timer only: no public web address is created for this Worker.
+workers_dev = false
+
+[triggers]
+crons = ["* * * * *"]
+
+[vars]
+# "1" = log what would be sent and send nothing. Set to "0" to go live.
+DRY_RUN = "1"
+# "on" = also send day-1 follow-ups. Leave "off" until paid customers are being labelled "paid" in Chatwoot.
+FOLLOWUPS = "off"
+
+# Secrets (set by the deploy workflow, never committed): CW_TOKEN, CW_ACC
+
+# Keep each run's log lines in the Cloudflare dashboard (Workers > this Worker > Logs).
+[observability]
+enabled = true

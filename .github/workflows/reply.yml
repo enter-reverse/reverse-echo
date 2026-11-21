@@ -9,6 +9,10 @@
 # every 5 minutes would use about 8,640 a month against an allowance of 2,000
 # that Olympus's deploys share. If the repo is ever made private the scheduled
 # job skips itself (a skipped job costs nothing); manual runs still work.
+#
+# GitHub runs a schedule as whoever last committed this file, and appears to
+# ignore it when that account has no access to the repo. Changes to this file
+# should land through a pull request merged by a repo member.
 
 name: reply
 on:

@@ -82,13 +82,16 @@ test("a Duo claim gets the Duo reply and is kept out of the $100 follow-up", asy
   assert.deepEqual(f.labels[1], ["claim", "duo"]);
 });
 
-test("it gives the CX chat's own watcher the first turn, and looks again right before sending", async () => {
-  // Under 75 seconds old: wait.
-  const young = fake({ open: [conv(1, INBOX.waCx, "Amy")], threads: { 1: [msg(11, 0, CLAIM, 40)] } });
-  await go(young);
-  assert.deepEqual(young.sent, []);
-  await tick({ api: young.api, options: { dryRun: false, now: NOW + 60 }, log: () => {} }); // a minute later
-  assert.equal(young.sent.length, 1);
+test("a message is answered on the next pass; an optional wait and the last-second re-check still work", async () => {
+  // Seconds old: answered straight away.
+  const fresh = fake({ open: [conv(1, INBOX.waCx, "Amy")], threads: { 1: [msg(11, 0, CLAIM, 5)] } });
+  await go(fresh);
+  assert.equal(fresh.sent.length, 1);
+
+  // With a wait configured, a young message is left for the next pass.
+  const waiting = fake({ open: [conv(3, INBOX.waCx, "Cy")], threads: { 3: [msg(31, 0, CLAIM, 40)] } });
+  await go(waiting, { minAgeSecs: 75 });
+  assert.deepEqual(waiting.sent, []);
 
   // A reply lands between this pass reading the chat and sending: don't send a second one.
   const raced = fake({ open: [conv(2, INBOX.waCx, "Bo")], threads: { 2: [msg(21, 0, CLAIM, 120)] } });

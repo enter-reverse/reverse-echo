@@ -31,7 +31,7 @@ Everything it says lives in [`rules.json`](rules.json). Each rule is one keyword
 
 ## How it works
 
-Every 5 minutes Echo reads the comments on the 25 most recent posts and answers any that match a rule. There is no database. Two checks stop anyone being messaged twice:
+Every minute Echo reads the comments on the 20 most recent posts and answers any that match a rule. There is no database. Two checks stop anyone being messaged twice:
 
 1. **Our reply under the comment.** A comment that already has a reply from @enter.reverse is done. Instagram lists replies alongside comments and marks the ones the account wrote itself (a `user` field instead of `from`), so Echo knows which replies are ours. If a reply's author can't be resolved at all, it counts as ours and nothing is sent.
 2. **The DM thread.** Before any DM, Echo reads the recent messages with that person. If we have already sent them this rule's message, whether by Echo, by hand or by the CX auto-reply, they get nothing more: no DM and no public reply. "This rule's message" means a message containing the first link in the rule's `dm` (or the rule's `sentMarker`, if set).
@@ -71,18 +71,13 @@ Settings (environment): `IG_ACCESS_TOKEN` (required), `DRY_RUN`, `DIAGNOSE`, `HI
 
 ## Where it runs
 
-GitHub Actions, `.github/workflows/reply.yml`, every 5 minutes (GitHub often starts scheduled runs late, so expect 5 to 15 minutes from comment to DM). A daily `keepalive` job re-enables the workflow, because GitHub switches off schedules in public repos after 60 days without a commit. The schedule only runs while the repo is public; the reason is in the workflow's header comment. Actions → reply → Run workflow does a pass by hand, with a dry-run tick box and a diagnose option.
+On Cloudflare Workers (`worker/`), started every minute by Cloudflare's timer, so a DM goes out within about a minute of the comment. `deploy-worker.yml` deploys it whenever the Worker or the code it uses changes on main, and copies `IG_ACCESS_TOKEN` from this repo's Actions secrets into the Worker. The only Cloudflare secret here is `CLOUDFLARE_API_TOKEN`; the account id is in `worker/wrangler.toml`.
 
-## Running on Cloudflare instead (built, not switched on)
+- **See what it is doing:** Actions → worker-logs → Run workflow, or the Worker's Logs tab in the Cloudflare dashboard.
+- **Pause it:** set `DRY_RUN = "1"` in `worker/wrangler.toml` and merge; it keeps running but sends nothing.
+- **Run a pass by hand:** Actions → reply → Run workflow (dry-run tick box, diagnose option). GitHub's own schedule was removed: it never fired on this repo, and two timers must never both send.
 
-GitHub's timer did not fire once on this repo in its first hours, so the same pass is also packaged as a Cloudflare Worker (`worker/`), which Cloudflare starts every minute. It is not live until someone connects a Cloudflare account:
-
-1. Create a free Cloudflare account.
-2. Add one Actions secret to this repo: `CLOUDFLARE_API_TOKEN` (a token made from Cloudflare's "Edit Cloudflare Workers" template). The account id is already in each `wrangler.toml`.
-3. Run Actions → deploy-worker. It deploys the Worker in dry-run mode and copies `IG_ACCESS_TOKEN` across.
-4. Read the Worker's logs for a few minutes, then set `DRY_RUN = "0"` in `worker/wrangler.toml` to go live, and in the same change remove the `schedule:` block from `reply.yml`, so the two timers never both send.
-
-The free plan allows 50 outgoing calls per run, so each pass is capped (20 posts, 6 DM-thread reads, 5 sends); anything over that is handled a minute later.
+The free Cloudflare plan allows 50 outgoing calls per run, so each pass is capped (20 posts, 6 DM-thread reads, 5 sends); anything over that is handled a minute later.
 
 ## The CX watcher (`cx-worker/`, built, not switched on)
 
@@ -100,7 +95,7 @@ To switch it on: add the `CHATWOOT_TOKEN` and `CHATWOOT_ACCOUNT_ID` Actions secr
 | Cause | What you'd see | Fix |
 |---|---|---|
 | Token expired (about 20 Jan 2027) or revoked | Every run fails with "Instagram rejected the access token" | Generate a new token on the Meta page, update the `IG_ACCESS_TOKEN` secret |
-| Repo made private | Scheduled runs show as skipped | Make it public again, or move the runner |
+| Cloudflare token revoked or account closed | deploy-worker fails; the Worker stops updating or running | Create a new token (Edit Cloudflare Workers), update `CLOUDFLARE_API_TOKEN` |
 | @enter.reverse removed as Instagram Tester, or a permission removed from the Meta app | Runs fail or warn on every comment | Restore the role or permission, generate a new token |
 | Meta retires "Instagram login" (it is already labelled legacy) | Runs start failing | Move Echo to Unified login |
 | A broken edit to `rules.json` | Run fails at "Check rules.json", nothing is sent | Fix the file; `npm run check` validates it |
@@ -109,7 +104,7 @@ Nothing alerts anyone when runs fail. Check the Actions tab, or set up a daily c
 
 ## Limits
 
-- **Polling, not instant.** Instagram only pushes comments to apps that have passed App Review (Advanced Access). Until then Echo checks on a timer, so the DM lands a few minutes after the comment rather than within seconds.
+- **About a minute, not instant.** Instagram only pushes comments to apps that have passed App Review (Advanced Access). Until then Echo checks every minute.
 - **Instagram only.** TikTok has no API for replying to comments.
 - **Replies inside threads.** A "TRIAL" written as a reply under someone else's comment should also get the DM, since Instagram lists replies alongside comments, but this has not been seen on the live account yet.
 - **One-word comments only.** "trial please" or "TRIAL @friend" gets nothing. That is deliberate (see `match` above), but it does mean near-misses are left for a person to answer.

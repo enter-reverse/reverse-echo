@@ -63,7 +63,7 @@ export function mask(username) {
  * @param {(line: string) => void} [deps.log]
  */
 export async function runOnce({ api, rules, options = {}, log = console.log }) {
-  const { dryRun = false, mediaLimit = 25, maxActions = 40, ignoreBefore = null, historyCheck = true, now = new Date() } = options;
+  const { dryRun = false, diagnose = false, mediaLimit = 25, maxActions = 40, ignoreBefore = null, historyCheck = true, now = new Date() } = options;
   const summary = {
     checkedMedia: 0, checkedComments: 0, matched: 0, alreadyReplied: 0, alreadyDmed: 0,
     dmSent: 0, replied: 0, fallback: 0, deferred: 0, skippedOld: 0, errors: [],
@@ -126,14 +126,23 @@ export async function runOnce({ api, rules, options = {}, log = console.log }) {
           continue;
         }
       }
-      if (replies.some((r) => isOurs(r, me))) {
+      // Instagram returns other people's replies with an author and leaves it off ours,
+      // so a reply with no author counts as ours. Either way nothing more is sent.
+      if (replies.some((r) => isOurs(r, me) || !hasAuthor(r))) {
         summary.alreadyReplied++;
         if (dryRun) log(`[dry run] ${tag}: already has our reply -> skip`);
-        continue;
-      }
-      if (replies.some((r) => !hasAuthor(r))) {
-        summary.deferred++;
-        summary.errors.push(`${tag}: has a reply whose author Instagram didn't return; not sending`);
+        if (diagnose) {
+          log(`[diagnose] ${tag}: replies: ${replies.map((r) => `${hasAuthor(r) ? (isOurs(r, me) ? "ours" : "other") : "no-author"} ${JSON.stringify(String(r.text ?? "").slice(0, 30))}`).join(" | ")}`);
+          if (personId) {
+            try {
+              const messages = await api.messagesWith(personId);
+              const marker = sentMarker(rule);
+              log(`[diagnose] ${tag}: DM thread ${messages.length} msg, ${messages.filter((m) => isOurs(m, me)).length} from us, fields ${Object.keys(messages[0] ?? {}).join(",") || "-"}/${Object.keys(messages[0]?.from ?? {}).join(",") || "-"}, got this DM before: ${messages.some((m) => String(m.message ?? "").includes(marker)) ? "yes" : "no"}`);
+            } catch (err) {
+              log(`[diagnose] ${tag}: DM history failed (code ${err.code ?? "?"}): ${err.message}`);
+            }
+          }
+        }
         continue;
       }
 

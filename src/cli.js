@@ -59,6 +59,7 @@ try {
     rules,
     options: {
       dryRun: env.DRY_RUN === "1" || env.DRY_RUN === "true",
+      diagnose: env.DIAGNOSE === "1",
       mediaLimit: Number(env.MEDIA_LIMIT) || 25,
       maxActions: Number(env.MAX_ACTIONS) || 40,
       ignoreBefore,

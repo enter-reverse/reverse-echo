@@ -182,7 +182,7 @@ test("if DM history can't be read, or Instagram doesn't say who commented, nothi
   assert.equal(s2.deferred, 1);
 });
 
-test("a reply with no author is treated as possibly ours; our replies are recognised by id as well as name", async () => {
+test("a reply with no author counts as ours; our replies are recognised by id as well as name", async () => {
   const { api, sent } = fakeApi({
     comments: { m1: [
       comment("c1", "amy", "TRIAL", 1, [{ id: "r1" }]),
@@ -192,8 +192,8 @@ test("a reply with no author is treated as possibly ours; our replies are recogn
   });
   const s = await run(api);
   assert.deepEqual(sent.dms.map((d) => d.commentId), ["c3"]);
-  assert.equal(s.alreadyReplied, 1);
-  assert.equal(s.deferred, 1);
+  assert.equal(s.alreadyReplied, 2);
+  assert.equal(s.deferred, 0);
 });
 
 test("when the comment list hides reply authors, Echo looks the replies up directly", async () => {

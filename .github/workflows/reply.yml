@@ -19,6 +19,10 @@ on:
         description: "Dry run (log only, send nothing)"
         type: boolean
         default: true
+      diagnose:
+        description: "Diagnose (extra detail on already-answered comments)"
+        type: boolean
+        default: false
   # schedule:
   #   - cron: "*/5 * * * *"
 
@@ -48,6 +52,7 @@ jobs:
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
           IGNORE_BEFORE: ${{ vars.IGNORE_BEFORE }}
           # Scheduled runs send for real; manual runs follow the tick box.
+          DIAGNOSE: ${{ inputs.diagnose && '1' || '0' }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '0' }}
         run: |
           test -n "$IG_ACCESS_TOKEN" || { echo "::error::IG_ACCESS_TOKEN is not set in this repo's Actions secrets"; exit 1; }

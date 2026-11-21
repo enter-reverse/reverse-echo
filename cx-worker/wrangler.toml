@@ -16,6 +16,12 @@ crons = ["* * * * *"]
 DRY_RUN = "0"
 # "on" = also send day-1 follow-ups. Leave "off" until paid customers are being labelled "paid" in Chatwoot.
 FOLLOWUPS = "off"
+# Days 3 and 5 are WhatsApp templates (claim_followup_day3, claim_followup_day5). Turn each "on" only once
+# Meta shows it as Active on the CX number, and paying customers are being labelled "paid".
+FOLLOWUP_DAY3 = "off"
+FOLLOWUP_DAY5 = "off"
+# The language code the templates were approved under ("en", or "en_US" / "en_GB" if that was picked).
+TEMPLATE_LANGUAGE = "en"
 
 # Secrets (set by the deploy workflow, never committed): CW_TOKEN, CW_ACC, SHOPIFY_WEBHOOK_SECRET
 

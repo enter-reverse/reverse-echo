@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { INBOX, firstName, followup1, kindOf, tpl } from "../src/templates.js";
+import { INBOX, TEMPLATES, firstName, followup1, kindOf, tpl } from "../src/templates.js";
 import { tick } from "../src/cx.js";
 import { createChatwoot } from "../src/chatwoot.js";
 import worker, { run } from "../src/index.js";
@@ -35,7 +35,8 @@ function fake({ open = [], labelled = [], threads = {} }) {
     sent, labels,
     api: {
       conversations: async (status) => (status === "open" ? open : []),
-      labelled: async () => labelled,
+      labelled: async (_l, page = 1) => labelled.slice((page - 1) * 25, page * 25),
+      sendTemplate: async (cid, t) => { sent.push({ cid, template: t.name, body: t.body, content: t.content }); (threads[cid] ??= []).push(msg(9500 + sent.length, 1, t.content, 0)); },
       messages: async (cid) => [...(threads[cid] ?? [])].sort((a, b) => a.created_at - b.created_at),
       send: async (cid, content) => { sent.push({ cid, content }); (threads[cid] ??= []).push(msg(9000 + sent.length, 1, content, 0)); },
       addLabels: async (cid, l) => { labels[cid] = [...new Set([...(labels[cid] ?? []), ...l])]; },
@@ -202,4 +203,60 @@ test("the Shopify address only accepts requests signed with the secret", async (
   assert.equal((await post({})).status, 401);
   assert.equal((await worker.fetch(new Request("https://x/shopify", { method: "POST", body }), { ...env, SHOPIFY_WEBHOOK_SECRET: "" }, ctx)).status, 503);
   assert.equal((await worker.fetch(new Request("https://x/"), env, ctx)).status, 200);
+});
+
+// 1_800_000_000 is 12:00 in Singapore, inside the daytime hours.
+const D = 24 * H;
+const oldClaim = (id, name, days, labels = ["claim"], inbox = INBOX.waCx) => conv(id, inbox, name, { labels, last_activity_at: NOW - days * D + 60 });
+const both = { templates: { day3: true, day5: true } };
+
+test("days 3 and 5 go out as templates, once each, only in the day they fall due", async () => {
+  const f = fake({
+    labelled: [oldClaim(1, "jenny tan", 3.2), oldClaim(2, "Sam", 5.5), oldClaim(3, "Old", 5.9), oldClaim(4, "Early", 2.5)],
+    threads: { 1: claimThread(3.2 * D), 2: claimThread(5.5 * D), 3: claimThread(9 * D), 4: claimThread(2.5 * D) },
+  });
+  const s = await go(f, both);
+  assert.deepEqual(f.sent.map((x) => [x.cid, x.template]), [[1, "claim_followup_day3"], [2, "claim_followup_day5"]]);
+  assert.deepEqual(f.sent[0].body, { 1: "Jenny" });
+  assert.equal(f.sent[0].content, TEMPLATES.day3.text("Jenny"));
+  assert.ok(f.sent[0].content.endsWith("let my team know to expect you!"));
+  assert.deepEqual(f.labels, { 1: ["fu3"], 2: ["fu5"] });
+  assert.equal(s.templatesSent, 2);
+});
+
+test("no template when it's off, at night, they wrote last, we just wrote, they paid, or there's no name", async () => {
+  const quiet = () => fake({ labelled: [oldClaim(1, "Jo", 3.2)], threads: { 1: claimThread(3.2 * D) } });
+  let f = quiet(); await go(f); assert.deepEqual(f.sent, [], "off by default");
+  f = quiet(); await go(f, { templates: { day5: true } }); assert.deepEqual(f.sent, [], "only day 5 is on");
+  f = quiet(); await go(f, { ...both, now: NOW + 14 * H }); assert.deepEqual(f.sent, [], "2am in Singapore");
+  f = quiet(); await go(f, { ...both, dryRun: true }); assert.deepEqual(f.sent, [], "dry run");
+  f = fake({ labelled: [oldClaim(1, "Jo", 3.2)], threads: { 1: claimThread(3.2 * D, [msg(3, 0, "is parking free?", 3.1 * D)]) } });
+  await go(f, both); assert.deepEqual(f.sent, [], "they wrote last");
+  f = fake({ labelled: [oldClaim(1, "Jo", 3.2)], threads: { 1: claimThread(3.2 * D, [msg(3, 1, "hello again", 2 * H)]) } });
+  await go(f, both); assert.deepEqual(f.sent, [], "we wrote two hours ago");
+  for (const l of ["paid", "no-followup", "fu3"]) {
+    f = fake({ labelled: [oldClaim(1, "Jo", 3.2, ["claim", l])], threads: { 1: claimThread(3.2 * D) } });
+    await go(f, both); assert.deepEqual(f.sent, [], l);
+  }
+  f = fake({ labelled: [oldClaim(1, "S", 3.2), oldClaim(2, "Ig", 3.2, ["claim"], INBOX.instagram)], threads: { 1: claimThread(3.2 * D), 2: claimThread(3.2 * D) } });
+  await go(f, both); assert.deepEqual(f.sent, [], "a one-letter name, and Instagram");
+});
+
+test("a Duo claimer gets the day-3 invite but not the $100 day-5 note; claims past the first page are reached", async () => {
+  const filler = Array.from({ length: 25 }, (_, i) => conv(100 + i, INBOX.waCx, "New", { labels: ["claim"] }));
+  const f = fake({
+    labelled: [...filler, oldClaim(1, "Duo", 3.2, ["claim", "duo"]), oldClaim(2, "Pair", 5.2, ["claim", "duo", "fu3"])],
+    threads: { 1: claimThread(3.2 * D), 2: claimThread(5.2 * D) },
+  });
+  await go(f, both);
+  assert.deepEqual(f.sent.map((x) => [x.cid, x.template]), [[1, "claim_followup_day3"]]);
+});
+
+test("a template is sent to Chatwoot in the shape its API expects", async () => {
+  const calls = [];
+  const api = createChatwoot({ token: "t", account: 1, fetchImpl: async (url, init) => { calls.push({ url, body: JSON.parse(init.body) }); return new Response("{}"); } });
+  await api.sendTemplate(7, { name: "claim_followup_day3", body: { 1: "Jo" }, content: "Hi Jo" });
+  assert.ok(calls[0].url.endsWith("/conversations/7/messages"));
+  assert.deepEqual(calls[0].body, { content: "Hi Jo", message_type: "outgoing", private: false,
+    template_params: { name: "claim_followup_day3", category: "MARKETING", language: "en", processed_params: { body: { 1: "Jo" } } } });
 });

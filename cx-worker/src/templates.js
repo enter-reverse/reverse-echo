@@ -90,3 +90,20 @@ export function followup1(name) {
   return name ? `Hi ${name}, your ${body}` : `Hi! Your ${body}`;
 }
 export const FOLLOWUP1_MARKER = "$100 off is still saved for you";
+
+// Days 3 and 5 go out after WhatsApp's 24-hour window has closed, so they are Meta-approved templates
+// (WhatsApp Manager > Message templates, on the CX number). The wording below is what was submitted
+// (the user, 22 Nov 2026); Meta sends its own approved copy, this text is what Chatwoot shows in the chat.
+// {{1}} is the first name. A template can't open without one, so nameless claimers are skipped.
+export const TEMPLATES = {
+  day3: {
+    name: "claim_followup_day3",
+    label: "fu3",
+    text: (n) => `Hi ${n}, Zoey from Reverse here :)\n\nIf you'd rather see the space before deciding, come by for a tour. We're at 171 Joo Chiat Road, open 7am to 10pm.\n\nJust reply here with when you're coming and I'll let my team know to expect you!`,
+  },
+  day5: {
+    name: "claim_followup_day5",
+    label: "fu5",
+    text: (n) => `Hi ${n}, last note from me about your $100 off, so I don't fill up your chat :)\n\nIt's still saved if you want it. Reply here any time and I'll send your link or answer anything.`,
+  },
+};

@@ -21,3 +21,7 @@ MAX_LOOKUPS = "6"
 MAX_ACTIONS = "5"
 
 # Secret (set by the deploy workflow, never committed): IG_ACCESS_TOKEN
+
+# Keep each run's log lines in the Cloudflare dashboard (Workers > this Worker > Logs).
+[observability]
+enabled = true

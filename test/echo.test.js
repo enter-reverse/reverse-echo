@@ -209,6 +209,31 @@ test("when the comment list hides reply authors, Echo looks the replies up direc
   assert.equal(s.alreadyReplied, 1);
 });
 
+test("replies listed alongside comments tell us who wrote them, with no extra call", async () => {
+  let directCalls = 0;
+  const flat = [
+    comment("c1", "amy", "TRIAL", 3, [{ id: "r1" }]),
+    { id: "r1", text: "@amy Sent!", timestamp: hoursAgo(2), user: { id: "17841" } }, // our reply, as Instagram lists it
+    comment("c2", "bob", "TRIAL", 3, [{ id: "r2" }]),
+    { id: "r2", text: "same here", timestamp: hoursAgo(2), from: { id: "u_zed", username: "zed" } }, // someone else's reply
+  ];
+  const { api, sent } = fakeApi({ comments: { m1: flat } });
+  api.replies = async () => { directCalls++; return []; };
+  const s = await run(api);
+  assert.deepEqual(sent.dms.map((d) => d.commentId), ["c2"]);
+  assert.equal(s.alreadyReplied, 1);
+  assert.equal(directCalls, 0);
+});
+
+test("already-messaged people don't use up the send cap", async () => {
+  const many = Array.from({ length: 6 }, (_, i) => comment(`c${i}`, `u${i}`, "trial"));
+  const threads = Object.fromEntries([0, 1, 2, 3].map((i) => [`u_u${i}`, [{ from: { id: "17841" }, message: GIFT }]]));
+  const { api, sent } = fakeApi({ comments: { m1: many }, threads });
+  const s = await run(api, { maxActions: 2 });
+  assert.deepEqual(sent.dms.map((d) => d.commentId), ["c4", "c5"]);
+  assert.equal(s.alreadyDmed, 4);
+});
+
 test("names are masked in logs and the marker defaults to the DM's link", () => {
   assert.equal(mask("amy_tan"), "@am…");
   assert.equal(mask(undefined), "@?");

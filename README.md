@@ -32,7 +32,7 @@ Everything it says lives in [`rules.json`](rules.json). Each rule is one keyword
 
 Every 5 minutes Echo reads the comments on the 25 most recent posts and answers any that match a rule. There is no database. Two checks stop anyone being messaged twice:
 
-1. **Our reply under the comment.** A comment that already has a reply from @enter.reverse is done. (Instagram returns our own replies without an author, so a reply with no author counts as ours.)
+1. **Our reply under the comment.** A comment that already has a reply from @enter.reverse is done. Instagram lists replies alongside comments and marks the ones the account wrote itself (a `user` field instead of `from`), so Echo knows which replies are ours. If a reply's author can't be resolved at all, it counts as ours and nothing is sent.
 2. **The DM thread.** Before any DM, Echo reads the recent messages with that person. If we have already sent them this rule's message, whether by Echo, by hand or by the CX auto-reply, they get nothing more: no DM and no public reply. "This rule's message" means a message containing the first link in the rule's `dm` (or the rule's `sentMarker`, if set).
 
 If either check can't be answered for certain, Echo sends nothing and tries again on the next run.
@@ -54,7 +54,7 @@ Logs are public because the repo is public, so usernames are masked (`@ab…`) a
 ## Run it
 
 ```sh
-npm test                                   # 20 tests, no network
+npm test                                   # 22 tests, no network
 IG_ACCESS_TOKEN=... npm run dry-run        # shows what it would send, sends nothing
 IG_ACCESS_TOKEN=... npm start              # sends
 ```
@@ -70,12 +70,27 @@ Settings (environment): `IG_ACCESS_TOKEN` (required), `DRY_RUN`, `DIAGNOSE`, `HI
 
 ## Where it runs
 
-GitHub Actions, `.github/workflows/reply.yml`, every 5 minutes (GitHub often starts scheduled runs late, so expect 5 to 15 minutes from comment to DM). The schedule only runs while the repo is public; the reason is in the workflow's header comment. Actions → reply → Run workflow does a pass by hand, with a dry-run tick box and a diagnose option.
+GitHub Actions, `.github/workflows/reply.yml`, every 5 minutes (GitHub often starts scheduled runs late, so expect 5 to 15 minutes from comment to DM). A daily `keepalive` job re-enables the workflow, because GitHub switches off schedules in public repos after 60 days without a commit. The schedule only runs while the repo is public; the reason is in the workflow's header comment. Actions → reply → Run workflow does a pass by hand, with a dry-run tick box and a diagnose option.
+
+## What would stop it
+
+| Cause | What you'd see | Fix |
+|---|---|---|
+| Token expired (about 20 Jan 2027) or revoked | Every run fails with "Instagram rejected the access token" | Generate a new token on the Meta page, update the `IG_ACCESS_TOKEN` secret |
+| Repo made private | Scheduled runs show as skipped | Make it public again, or move the runner |
+| @enter.reverse removed as Instagram Tester, or a permission removed from the Meta app | Runs fail or warn on every comment | Restore the role or permission, generate a new token |
+| Meta retires "Instagram login" (it is already labelled legacy) | Runs start failing | Move Echo to Unified login |
+| A broken edit to `rules.json` | Run fails at "Check rules.json", nothing is sent | Fix the file; `npm run check` validates it |
+
+Nothing alerts anyone when runs fail. Check the Actions tab, or set up a daily check.
 
 ## Limits
 
 - **Polling, not instant.** Instagram only pushes comments to apps that have passed App Review (Advanced Access). Until then Echo checks on a timer, so the DM lands a few minutes after the comment rather than within seconds.
 - **Instagram only.** TikTok has no API for replying to comments.
-- **Top-level comments only.** A "TRIAL" written as a reply inside someone else's thread is not picked up.
+- **Replies inside threads.** A "TRIAL" written as a reply under someone else's comment should also get the DM, since Instagram lists replies alongside comments, but this has not been seen on the live account yet.
+- **Any comment containing the word.** "Already did my trial, loved it" matches too. If that person has had the DM before they are skipped; if not, they get it.
+- **DM history goes back 20 messages.** Instagram only lets Echo read the 20 most recent messages in a thread. Someone who got the link, then exchanged more than 20 messages with us, then commented TRIAL again would be sent it again.
+- **Big reels.** Echo reads up to 1,000 comments per post per run, newest first, stopping at the 7-day mark.
 - **Organic posts only.** Comments on ads that aren't also on the profile grid are not in the list Echo reads.
 - **Reading is proven on the live account; sending is not yet.** Dry runs on 21 Nov 2026 read comments, replies and DM threads correctly. The first real DM and public reply will be the test of the two sending calls.

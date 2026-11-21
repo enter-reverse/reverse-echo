@@ -57,14 +57,15 @@ export function mask(username) {
  * @param {object} [deps.options]
  * @param {boolean} [deps.options.dryRun]       log what would be sent, send nothing
  * @param {number}  [deps.options.mediaLimit]   how many recent posts to check (default 25)
- * @param {number}  [deps.options.maxActions]   cap on comments looked into per run (default 40)
+ * @param {number}  [deps.options.maxActions]   cap on DMs sent per run (default 40)
+ * @param {number}  [deps.options.maxLookups]   cap on DM threads read per run (default 120)
  * @param {Date}    [deps.options.ignoreBefore] never answer comments older than this (go-live time)
  * @param {boolean} [deps.options.historyCheck] read the DM thread before sending (default true)
  * @param {Date}    [deps.options.now]
  * @param {(line: string) => void} [deps.log]
  */
 export async function runOnce({ api, rules, options = {}, log = console.log }) {
-  const { dryRun = false, diagnose = false, mediaLimit = 25, maxActions = 40, ignoreBefore = null, historyCheck = true, now = new Date() } = options;
+  const { dryRun = false, diagnose = false, mediaLimit = 25, maxActions = 40, maxLookups = 120, ignoreBefore = null, historyCheck = true, now = new Date() } = options;
   const summary = {
     checkedMedia: 0, checkedComments: 0, matched: 0, alreadyReplied: 0, alreadyDmed: 0,
     dmSent: 0, replied: 0, fallback: 0, deferred: 0, skippedOld: 0, errors: [],
@@ -74,19 +75,26 @@ export async function runOnce({ api, rules, options = {}, log = console.log }) {
   const dmedThisRun = new Set();
   const history = new Map(); // person -> their recent DMs with us, read once per run
   let actions = 0;
+  let lookups = 0;
 
   const media = await api.recentMedia(mediaLimit);
   for (const item of media) {
     if (!item.comments_count) continue;
     let comments;
     try {
-      comments = await api.comments(item.id);
+      // Newest first, so once a page reaches past the 7-day window the rest is too old to answer.
+      comments = await api.comments(item.id, {
+        stopWhen: (page) => page.length > 0 && now - new Date(page[page.length - 1].timestamp) > REPLY_WINDOW_MS,
+      });
     } catch (err) {
       if (err.kind === "auth") throw err;
       summary.errors.push(`comments on ${item.id}: ${err.message}`);
       continue;
     }
     summary.checkedMedia++;
+    // Instagram lists replies alongside top-level comments, and marks the ones we wrote.
+    // Looking a reply up here tells us who wrote it without another call.
+    const byId = new Map(comments.map((c) => [c.id, c]));
     if (diagnose) {
       const times = comments.map((c) => Date.parse(c.timestamp));
       const desc = times.every((t, i) => i === 0 || t <= times[i - 1]);
@@ -130,9 +138,12 @@ export async function runOnce({ api, rules, options = {}, log = console.log }) {
       const tag = `${rule.name}: comment ${c.id} by ${who}`;
 
       // Check 1: have we already replied under this comment?
-      let replies = c.replies?.data ?? [];
-      if (replies.length && replies.some((r) => !hasAuthor(r))) {
-        // The nested list came back without authors; ask for this comment's replies directly.
+      let replies = (c.replies?.data ?? []).map((r) => (hasAuthor(r) ? r : byId.get(r.id) ?? r));
+      if (diagnose && replies.length) {
+        log(`[diagnose] ${tag}: ${replies.length} repl${replies.length === 1 ? "y" : "ies"}, resolved from the comment list: ${replies.map((r) => (hasAuthor(r) ? (isOurs(r, me) ? "ours" : "other") : "unresolved")).join(",")}`);
+      }
+      if (replies.some((r) => !hasAuthor(r))) {
+        // Not in the list we have (e.g. it was cut by paging); ask for this comment's replies directly.
         try {
           replies = await api.replies(c.id);
           if (dryRun && !history.replyShapeLogged) {
@@ -166,9 +177,6 @@ export async function runOnce({ api, rules, options = {}, log = console.log }) {
         continue;
       }
 
-      if (actions >= maxActions) { summary.deferred++; continue; }
-      actions++;
-
       // Check 2: have we already sent this person this rule's message in DMs?
       if (historyCheck) {
         if (!personId) {
@@ -178,6 +186,8 @@ export async function runOnce({ api, rules, options = {}, log = console.log }) {
         }
         let messages = history.get(personId);
         if (!messages) {
+          if (lookups >= maxLookups) { summary.deferred++; continue; }
+          lookups++;
           try {
             messages = await api.messagesWith(personId);
             history.set(personId, messages);
@@ -201,6 +211,9 @@ export async function runOnce({ api, rules, options = {}, log = console.log }) {
           continue;
         }
       }
+
+      if (actions >= maxActions) { summary.deferred++; continue; }
+      actions++;
 
       const publicText = pickReply(rule.publicReplies, c.id);
       if (dryRun) {

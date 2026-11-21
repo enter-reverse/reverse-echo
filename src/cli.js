@@ -6,7 +6,7 @@
 //   IGNORE_BEFORE     ISO time; comments older than this are never answered (set to go-live time)
 //   HISTORY_CHECK=0   skip reading the DM thread before sending (not recommended)
 //   MEDIA_LIMIT       how many recent posts to check (default 25)
-//   MAX_ACTIONS       cap on comments answered per run (default 40)
+//   MAX_ACTIONS       cap on DMs sent per run (default 40)
 //   IG_API_VERSION    default v25.0
 
 import { readFile } from "node:fs/promises";

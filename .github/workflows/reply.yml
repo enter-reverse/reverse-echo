@@ -23,7 +23,8 @@ on:
         type: boolean
         default: false
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "2-59/5 * * * *" # every 5 minutes, off the busy :00/:05 marks
+    - cron: "17 3 * * *" # once a day: keepalive (below)
 
 permissions:
   contents: read
@@ -39,11 +40,9 @@ jobs:
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
+      # No dependencies to install: Echo runs on the Node that ships with the runner (20 or newer).
       - name: Check rules.json
-        run: node src/cli.js --check
+        run: node --version && node src/cli.js --check
       - name: Check the links in the DMs load (manual runs)
         if: github.event_name == 'workflow_dispatch'
         run: node src/cli.js --check --links
@@ -57,3 +56,17 @@ jobs:
         run: |
           test -n "$IG_ACCESS_TOKEN" || { echo "::error::IG_ACCESS_TOKEN is not set in this repo's Actions secrets"; exit 1; }
           node src/cli.js
+
+  keepalive:
+    # GitHub switches off schedules in public repos after 60 days without a commit.
+    # Re-enabling the workflow once a day resets that clock, so Echo doesn't stop on its own.
+    if: github.event.schedule == '17 3 * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      actions: write
+    steps:
+      - name: Keep the schedule enabled
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/reply.yml/enable"

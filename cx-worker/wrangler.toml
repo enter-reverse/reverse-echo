@@ -23,6 +23,11 @@ FOLLOWUP_DAY5 = "off"
 # The language code the templates were approved under ("en", or "en_US" / "en_GB" if that was picked).
 TEMPLATE_LANGUAGE = "en"
 
+# "on" = WhatsApp the owner when a customer is still unanswered at 10 and 20 minutes, or a TRIAL or claim
+# message got no auto-reply within 5 minutes. They go to the owner's own chat with the CX line:
+ALERTS = "on"
+ALERT_CONVERSATION = "410"
+
 # Secrets (set by the deploy workflow, never committed): CW_TOKEN, CW_ACC, SHOPIFY_WEBHOOK_SECRET
 
 # Keep each run's log lines in the Cloudflare dashboard (Workers > this Worker > Logs).

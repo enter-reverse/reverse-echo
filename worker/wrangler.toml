@@ -3,6 +3,8 @@
 name = "reverse-echo"
 main = "src/index.js"
 compatibility_date = "2026-11-01"
+# Timer only: no public web address is created for this Worker.
+workers_dev = false
 
 [triggers]
 crons = ["* * * * *"]

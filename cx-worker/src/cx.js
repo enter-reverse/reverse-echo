@@ -9,6 +9,10 @@
 // 3. Days 3 and 5: the same quiet claimer gets a Meta-approved template (an invite to see the
 //    space, then a last note), each once, in the day after it falls due and only in the daytime.
 //
+// 4. Alerts to the owner's own WhatsApp chat with the CX line: a customer still unanswered at 10 and
+//    again at 20 minutes, and a TRIAL or claim message that got no auto-reply within 5 minutes.
+//    Each is sent once, by looking only at the one-minute slice that has just crossed the mark.
+//
 // There is no database. Chatwoot is the record: labels mark what a conversation is
 // ("claim", "trial", "duo") and what has been done ("fu1", "fu3", "fu5"), and people can steer it with
 // "paid" and "no-followup".
@@ -23,6 +27,7 @@ const EMAIL_NOISE = ["noreply", "no-reply", "no_reply", "classpass", "intercom",
   "apple.com", "spotify", "google.com", "notifications", "mailer", "reallygoodemails", "paddle.com", "newsletter", "news@", "updates@", "info@"];
 
 const sender = (c) => c.meta?.sender ?? {};
+const CHANNEL = { [INBOX.instagram]: "Instagram", [INBOX.waCx]: "WhatsApp", [INBOX.messenger]: "Messenger", [INBOX.email]: "email", [INBOX.web]: "web chat" };
 
 /**
  * @param {object} deps.api      client from chatwoot.js
@@ -30,18 +35,20 @@ const sender = (c) => c.meta?.sender ?? {};
  * @param {boolean} deps.options.dryRun      log what would be sent, send nothing (default true)
  * @param {boolean} deps.options.followups   run the day-1 follow-ups (default false)
  * @param {object}  [deps.options.templates] { day3: bool, day5: bool, language } - which template follow-ups to run (default none)
+ * @param {object}  [deps.options.alerts]  { conversation, account } - where alerts go (default: no alerts)
  * @param {number}  deps.options.now         unix seconds
  * @param {number}  [deps.options.freshSecs] only auto-reply to messages newer than this (default 15 min)
  * @param {number}  [deps.options.minAgeSecs] and older than this (default 0: answer on the next pass)
  */
 export async function tick({ api, options = {}, log = console.log }) {
-  const { dryRun = true, followups = false, templates = {}, now = Math.floor(Date.now() / 1000), freshSecs = 15 * 60, minAgeSecs = 0, maxThreads = 15, maxSends = 5 } = options;
-  const summary = { checked: 0, autoSent: 0, followupsSent: 0, templatesSent: 0, skipped: 0, errors: [] };
+  const { dryRun = true, followups = false, templates = {}, alerts = null, now = Math.floor(Date.now() / 1000), freshSecs = 15 * 60, minAgeSecs = 0, maxThreads = 15, maxSends = 5 } = options;
+  const summary = { checked: 0, autoSent: 0, followupsSent: 0, templatesSent: 0, alertsSent: 0, skipped: 0, errors: [] };
   const tag = dryRun ? "[dry run] " : "";
   let threads = 0;
   let sends = 0;
 
   // ---- 1. auto-replies -------------------------------------------------------------
+  const read = new Map(); // conversation id -> messages already fetched in this pass
   const convs = new Map();
   for (const status of ["open", "pending"]) {
     for (const c of await api.conversations(status)) convs.set(c.id, c);
@@ -55,6 +62,7 @@ export async function tick({ api, options = {}, log = console.log }) {
     threads++;
     try {
       const ms = await api.messages(cid);
+      read.set(cid, ms);
       summary.checked++;
       if (ms.some((m) => m.message_type === 1)) continue; // never reply twice
       // This Worker is the only sender of these replies (the CX chat stopped sending them on 22 Nov 2026),
@@ -68,6 +76,7 @@ export async function tick({ api, options = {}, log = console.log }) {
       // Look once more immediately before sending, in case a reply landed while this pass was running.
       if ((await api.messages(cid)).some((m) => m.message_type === 1)) continue;
       await api.send(cid, tpl(kind, firstName(sender(c).name)));
+      read.delete(cid); // answered: nothing to alert about
       summary.autoSent++;
       log(`AUTO-SENT ${kind} reply in conversation ${cid}`);
       await api.addLabels(cid, kind === "trial" ? ["trial"] : kind === "duo" ? ["claim", "duo"] : ["claim"]).catch((e) =>
@@ -165,6 +174,53 @@ export async function tick({ api, options = {}, log = console.log }) {
         await api.addLabels(c.id, [t.label]).catch((e) => summary.errors.push(`labels on ${c.id}: ${e.message}`));
       } catch (err) {
         summary.errors.push(`template follow-up ${c.id}: ${err.message}`);
+      }
+    }
+  }
+  // ---- 4. alerts -------------------------------------------------------------------
+  if (alerts?.conversation) {
+    const MIN = 60;
+    // `now` is the minute Cloudflare scheduled this pass for, so consecutive passes look at back-to-back
+    // one-minute slices and each waiting message crosses each mark in exactly one of them.
+    const crossed = (m, mins) => m.created_at > now - (mins + 1) * MIN && m.created_at <= now - mins * MIN;
+    let looked = 0;
+    for (const [cid, c] of convs) {
+      if (TEAM.has(cid) || cid === alerts.conversation || c.inbox_id === INBOX.waJooChiat) continue;
+      if ((c.last_activity_at ?? 0) <= now - 22 * MIN) continue; // nothing here can be crossing a mark
+      if (c.inbox_id === INBOX.email && EMAIL_NOISE.some((n) => (sender(c).email ?? "").toLowerCase().includes(n))) continue;
+      try {
+        let ms = read.get(cid);
+        if (!ms) {
+          if (looked >= 8) { summary.skipped++; continue; }
+          looked++;
+          ms = await api.messages(cid);
+        }
+        // The oldest customer message with no reply from us after it.
+        let waiting = null;
+        for (const m of ms) {
+          if (m.message_type === 0) waiting = waiting ?? m;
+          else if (waiting && m.created_at > waiting.created_at) waiting = null;
+        }
+        if (!waiting) continue;
+        const kind = !ms.some((m) => m.message_type === 1) && kindOf(waiting.content, c.inbox_id);
+        const what = kind && crossed(waiting, 5) ? `No auto-reply after 5 min (${kind})`
+          : crossed(waiting, 20) ? "Unanswered 20 min"
+          : crossed(waiting, 10) ? "Unanswered 10 min" : null;
+        if (!what) continue;
+        log(`ALERT ${what} in conversation ${cid}`);
+        if (dryRun) continue;
+        const said = String(waiting.content ?? "").trim().replace(/\s+/g, " ").slice(0, 300) || "[attachment]";
+        const at = new Date((waiting.created_at + 8 * HOUR) * 1000).toISOString().slice(11, 16);
+        const link = alerts.account ? `\n\nhttps://app.chatwoot.com/app/accounts/${alerts.account}/conversations/${cid}` : "";
+        try {
+          await api.send(alerts.conversation, `${what}\n\n${sender(c).name || "Someone"} on ${CHANNEL[c.inbox_id] ?? "chat"}, since ${at}\n\n"${said}"${link}`);
+          summary.alertsSent++;
+        } catch (err) {
+          // Most likely the owner's 24-hour WhatsApp window has closed; the log line above still records it.
+          summary.errors.push(`ALERT NOT DELIVERED for conversation ${cid}: ${err.message}`);
+        }
+      } catch (err) {
+        summary.errors.push(`alert check ${cid}: ${err.message}`);
       }
     }
   }

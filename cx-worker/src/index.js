@@ -18,17 +18,21 @@ export async function run(env, { fetchImpl = fetch, log = console.log, now = Mat
       templates: Math.floor(now / 60) % 10 === 5
         ? { day3: env.FOLLOWUP_DAY3 === "on", day5: env.FOLLOWUP_DAY5 === "on", language: env.TEMPLATE_LANGUAGE }
         : {},
+      // Alerts go to the owner's own WhatsApp chat with the CX line (a Chatwoot conversation id).
+      alerts: env.ALERTS === "on" && Number(env.ALERT_CONVERSATION) ? { conversation: Number(env.ALERT_CONVERSATION), account: env.CW_ACC } : null,
       now,
     },
   });
 }
 
 export default {
-  async scheduled(_event, env, ctx) {
+  async scheduled(event, env, ctx) {
     ctx.waitUntil(
       (async () => {
         try {
-          const { errors, ...counts } = await run(env);
+          // The scheduled minute, not the clock: back-to-back passes then never overlap or leave a gap.
+          const now = Math.floor((event?.scheduledTime ?? Date.now()) / 1000);
+          const { errors, ...counts } = await run(env, { now });
           // One line per pass, so the log shows the watcher is alive and reaching Chatwoot.
           console.log(JSON.stringify({ dryRun: !(env.DRY_RUN === "0" || env.DRY_RUN === "false"), ...counts }));
           for (const e of errors) console.warn(`warning: ${e}`);

@@ -17,7 +17,7 @@ export async function runLeads(env, now, { fetchImpl = fetch, log = console.log 
   if (!env.LEAD_FORMS) return null;
   const api = createChatwoot({ token: env.CW_TOKEN, account: env.CW_ACC, fetchImpl });
   const l = await syncLeads({ env, now, api, fetchImpl, log, dryRun: !(env.DRY_RUN === "0" || env.DRY_RUN === "false") });
-  if (l.leads || l.errors.length) log(JSON.stringify({ leadForms: l }));
+  log(JSON.stringify({ leadForms: l })); // every run, so the log shows the lead run is alive and how many it saw
   return l;
 }
 

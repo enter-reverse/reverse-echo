@@ -125,7 +125,7 @@ export async function tick({ api, options = {}, log = console.log }) {
         if (!theirs.length || !ours.length) continue; // the first reply hasn't gone out: not a follow-up case
         const claimedAt = theirs[0].created_at;
         const lastTheirs = theirs[theirs.length - 1].created_at;
-        if (now < claimedAt + 20 * HOUR) continue; // too early
+        if (now < claimedAt + 12 * HOUR) continue; // too early
         if (ms[ms.length - 1].message_type === 0) continue; // they wrote last: that needs an answer, not a nudge
         if (ours.some((m) => m.created_at >= claimedAt + 12 * HOUR || String(m.content ?? "").includes(FOLLOWUP1_MARKER))) {
           if (!dryRun) await api.addLabels(c.id, ["fu1"]).catch(() => {}); // already followed up (by hand or by us)
@@ -133,8 +133,15 @@ export async function tick({ api, options = {}, log = console.log }) {
         }
         const closes = lastTheirs + DAY; // WhatsApp only lets us write within 24h of their last message
         if (now > closes - 5 * 60) continue; // window shut
+        // Never at night: only between 9am and 9pm in Singapore.
+        const hour = Math.floor(((now + 8 * HOUR) % DAY) / HOUR);
+        if (hour < 9 || hour >= 21) continue;
         const due = Math.min(claimedAt + DAY, closes - 4 * HOUR);
-        if (now < due) continue;
+        // Someone who claimed in the small hours falls due at night. If the window would shut before 9am
+        // tomorrow, send in the last two hours of this evening instead (still at least 12 hours after the claim).
+        const next9am = now - ((now + 8 * HOUR) % DAY) + DAY + 9 * HOUR;
+        const lastChance = hour >= 19 && closes - 15 * 60 < next9am && now >= claimedAt + 12 * HOUR;
+        if (now < due && !lastChance) continue;
         sends++;
         if (dryRun) { log(`${tag}would send the day-1 follow-up in conversation ${c.id}`); continue; }
         await api.send(c.id, followup1(firstName(sender(c).name)));

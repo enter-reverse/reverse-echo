@@ -4,7 +4,7 @@
 //
 // What counts: the monthly pass (Shopify sku 100116): All-Access +1, Duo (quantity 2) +2. Red Light monthly
 // ("8 RLT/mth") adds nothing: only the one Darren sold is in the starting total. Team tests ($0/$1 orders,
-// "TEST" titles, @enterreverse.com emails) add nothing.
+// "TEST" titles, @enterreverse.com emails) add nothing. Monthly renewals of an existing pass add nothing either.
 //
 // No database: the running total is read back from the last "Total: N" this Worker (or the CX chat) sent
 // the user, falling back to PASS_BASE_TOTAL (61, confirmed by the user on 22 Nov 2026 01:38 SGT).
@@ -25,6 +25,10 @@ export function passDelta(order) {
   const test = Number(order.total_price ?? 0) <= 1 || /test/i.test(title) || email.endsWith("@enterreverse.com")
     || order.cancelled_at || (order.financial_status && order.financial_status !== "paid");
   if (test) return { kind: "test", n: 0 };
+  // A member's monthly renewal arrives as a new paid order with the same sku. Shopify's subscription app tags
+  // the first one "Subscription First Order"; any other subscription order is a renewal, not a new pass.
+  const tags = String(order.tags ?? "");
+  if (/subscription/i.test(tags) && !/first order/i.test(tags)) return { kind: "renewal", n: 0 };
   if (Number(line.quantity ?? 1) >= 2) return { kind: "Duo", n: 2 };
   if (/RLT/i.test(title)) return { kind: "Red Light", n: 0 };
   return { kind: "All-Access", n: 1 };

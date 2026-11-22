@@ -327,3 +327,22 @@ test("a day-old claim past the first page still gets its follow-up, and later pa
   assert.deepEqual(tight.sent, []);
   assert.equal(s.skipped, 1);
 });
+
+// NOW is 4:00pm in Singapore.
+test("the day-1 follow-up never goes out at night, and a small-hours claimer gets it that evening instead", async () => {
+  const at = (hoursFromNow, claimAgoH) => {
+    const now = NOW + hoursFromNow * H;
+    const t = (agoH) => ({ created_at: now - agoH * H });
+    const f = fake({
+      labelled: [conv(1, INBOX.waCx, "El", { labels: ["claim"], last_activity_at: now - claimAgoH * H + 60 })],
+      threads: { 1: [{ id: 1, message_type: 0, content: CLAIM, ...t(claimAgoH) }, { id: 2, message_type: 1, content: tpl("hbot", "El"), created_at: now - claimAgoH * H + 60 }] },
+    });
+    return go(f, { followups: true, now }).then(() => f.sent.length);
+  };
+  assert.equal(await at(0, 21), 1, "4pm, claimed 21 hours ago: due, sent");
+  assert.equal(await at(10, 21), 0, "2am: due, but it is night");
+  assert.equal(await at(17.5, 23.5), 1, "9:30am: sent in the morning, before the window shuts");
+  assert.equal(await at(3.5, 14), 1, "7:30pm, claimed at 5:30am: tomorrow morning is too late, so tonight");
+  assert.equal(await at(3.5, 8), 0, "7:30pm, claimed at 11:30am: tomorrow morning is still in time");
+  assert.equal(await at(1, 14), 0, "5pm, claimed at 3am: not yet the last two hours of the evening");
+});

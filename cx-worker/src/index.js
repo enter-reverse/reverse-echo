@@ -20,6 +20,8 @@ export async function run(env, { fetchImpl = fetch, log = console.log, now = Mat
       dryRun: !(env.DRY_RUN === "0" || env.DRY_RUN === "false"),
       // Follow-ups are checked every 10 minutes, and only when switched on.
       followups: env.FOLLOWUPS === "on" && Math.floor(now / 60) % 10 === 0,
+      // The once-per-chat "You're welcome!" (off since 23 Nov: Cloudflare sends only the first message).
+      thanks: env.THANK_YOU === "on",
       // Days 3 and 5 are Meta-approved templates, each with its own switch; checked every 10 minutes, off the day-1 minute.
       templates: Math.floor(now / 60) % 10 === 5
         ? { day3: env.FOLLOWUP_DAY3 === "on", day5: env.FOLLOWUP_DAY5 === "on", language: env.TEMPLATE_LANGUAGE }

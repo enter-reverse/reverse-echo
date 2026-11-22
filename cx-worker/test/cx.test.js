@@ -461,10 +461,12 @@ test("a thank-you gets 'You're welcome!' once in the whole chat, a minute later,
   ];
   const f = fake({ open: cases.map(([c]) => ({ ...c, last_activity_at: NOW - 90 })), threads: Object.fromEntries(cases.map(([c, t]) => [c.id, t])) });
   await go(f, { followups: false, maxSends: 20 });
+  assert.equal(f.sent.filter((x) => x.content === W).length, 0, "off unless switched on (23 Nov: Cloudflare sends only the first message)");
+  await go(f, { followups: false, thanks: true, maxSends: 20 });
   assert.deepEqual(f.sent.filter((x) => x.content === W).map((x) => x.cid), [50, 51]);
-  await go(f, { followups: false, maxSends: 20, now: NOW + 60 }); // a minute on: 53's thanks is now due
+  await go(f, { followups: false, thanks: true, maxSends: 20, now: NOW + 60 }); // a minute on: 53's thanks is now due
   assert.deepEqual(f.sent.filter((x) => x.content === W).map((x) => x.cid), [50, 51, 53]);
-  await go(f, { followups: false, maxSends: 20, now: NOW + 120 });
+  await go(f, { followups: false, thanks: true, maxSends: 20, now: NOW + 120 });
   assert.equal(f.sent.filter((x) => x.content === W).length, 3, "never twice");
 });
 

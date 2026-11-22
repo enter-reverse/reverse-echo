@@ -14,8 +14,11 @@ crons = ["* * * * *"]
 [vars]
 # "1" = log what would be sent and send nothing. "0" = live.
 DRY_RUN = "0"
-# "on" = also send day-1 follow-ups. Leave "off" until paid customers are being labelled "paid" in Chatwoot.
-FOLLOWUPS = "on"
+# "on" = also send day-1 follow-ups. Off since 23 Nov 1:19am: Cloudflare sends only the first message in a chat,
+# and the CX chat (Claude) sends every follow-up, so one sender sees the whole conversation (the user).
+FOLLOWUPS = "off"
+# "on" = "You're welcome! Always happy to help :)" once per chat after a thank-you. Off since 23 Nov 1:19am (same reason).
+THANK_YOU = "off"
 # Days 3 and 5 are WhatsApp templates (claim_followup_day3, claim_followup_day5). Turn each "on" only once
 # Meta shows it as Active on the CX number, and paying customers are being labelled "paid".
 FOLLOWUP_DAY3 = "off"

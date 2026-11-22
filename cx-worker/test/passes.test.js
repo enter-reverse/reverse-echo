@@ -12,7 +12,7 @@ const order = (extra = {}) => ({
 test("what each order adds: All-Access 1, Duo 2, Red Light and team tests nothing", () => {
   assert.deepEqual(passDelta(order()), { kind: "All-Access", n: 1 });
   assert.deepEqual(passDelta(order({ total_price: "299.00", line_items: [line("All-Access Pass · First month", 2)] })), { kind: "Duo", n: 2 });
-  assert.deepEqual(passDelta(order({ line_items: [line("8 RLT/mth – 30-day trial")] })), { kind: "Red Light", n: 0 });
+  assert.deepEqual(passDelta(order({ line_items: [line("8 RLT/mth – 30-day trial")] })), { kind: "Red Light", n: 1 });
   assert.equal(passDelta(order({ total_price: "0.00" })).n, 0);
   assert.equal(passDelta(order({ total_price: "1.00" })).n, 0);
   assert.equal(passDelta(order({ line_items: [line("TEST to see 🤔")] })).n, 0);
@@ -89,9 +89,8 @@ test("a Duo adds 2; a closed WhatsApp window leaves a note that still carries th
   assert.match(api.notes[0].content, /Not sent \(WhatsApp window closed\)[\s\S]*Total: 65/);
 });
 
-test("nothing is sent for Red Light, tests, or when the counter is switched off", async () => {
+test("nothing is sent for tests, or when the counter is switched off", async () => {
   const api = fakeApi({ userThread: [fromUser(60)] });
-  await countPass({ api, order: order({ line_items: [line("8 RLT/mth – 30-day trial")] }), env, now: NOW, log: () => {} });
   await countPass({ api, order: order({ total_price: "0.00" }), env, now: NOW, log: () => {} });
   await countPass({ api, order: order(), env: { PASS_ALERT_CONV: "" }, now: NOW, log: () => {} });
   assert.equal(api.sent.length, 0);

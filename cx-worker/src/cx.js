@@ -27,6 +27,14 @@ const EMAIL_NOISE = ["noreply", "no-reply", "no_reply", "classpass", "intercom",
   "apple.com", "spotify", "google.com", "notifications", "mailer", "reallygoodemails", "paddle.com", "newsletter", "news@", "updates@", "info@"];
 
 const sender = (c) => c.meta?.sender ?? {};
+/** A message that ends a chat and needs no reply: "Thank you! ☺️", "ok noted", "👍", "Appreciate it". */
+export function isCloser(text) {
+  if (String(text ?? "").includes("?")) return false;
+  const t = String(text ?? "").toLowerCase().replace(/[^\p{L}\s]/gu, " ").replace(/\s+/g, " ").trim();
+  if (!t) return /\S/.test(String(text ?? "")); // emoji or punctuation only; an attachment (no text) still counts
+  return /^((ok(ay)?|kk?|noted|sure|great|cool|nice|alright|got it|perfect|awesome|will do|sounds good|see you|see ya|bye)\s*)*((thanks?|thank you|thx|tq|ty|many thanks|thanks so much|thank you so much|appreciate it|much appreciated|cheers)(\s+(so much|a lot|zoey|again|ya|yah|yes))*)?$/.test(t)
+    && t.length <= 40;
+}
 const CHANNEL = { [INBOX.instagram]: "Instagram", [INBOX.waCx]: "WhatsApp", [INBOX.messenger]: "Messenger", [INBOX.email]: "email", [INBOX.web]: "web chat" };
 
 /**
@@ -208,10 +216,11 @@ export async function tick({ api, options = {}, log = console.log }) {
           looked++;
           ms = await api.messages(cid);
         }
-        // The oldest customer message with no reply from us after it.
+        // The oldest customer message with no reply from us after it. A sign-off ("thanks", "ok", "👍") needs
+        // no reply, so it never starts the clock (the user, 22 Nov: no pings for chats that have ended).
         let waiting = null;
         for (const m of ms) {
-          if (m.message_type === 0) waiting = waiting ?? m;
+          if (m.message_type === 0) waiting = waiting ?? (isCloser(m.content) ? null : m);
           else if (waiting && m.created_at > waiting.created_at) waiting = null;
         }
         if (!waiting) continue;

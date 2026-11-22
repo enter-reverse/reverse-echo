@@ -74,7 +74,8 @@ while True:
                     cf = autoreply.cloudflares(m, ms, c["inbox_id"])
                     if k and k != "red_info" and cf is True: dashboard.add_claim(cid)  # an enquiry tap isn't a claim
                     if cf: continue  # Cloudflare's reply (or a repeat tap already answered): nothing for Claude
-                    if autoreply.is_thanks(m.get("content")): continue  # Cloudflare's "You're welcome!" (once per chat)
+                    # Thank-yous come to Claude again (23 Nov 1:19am: Cloudflare sends only the first message); Claude
+                    # replies "You're welcome!" once per chat.
                     events.append(f"NEW {cid} {name} {t(m['created_at'])} | {(m.get('content') or '[attachment]')[:250].replace(chr(10), ' ')}")
             # a TRIAL or claim Cloudflare still hasn't answered after 5 minutes: flag it
             for i, m in enumerate(ms):
@@ -101,6 +102,16 @@ while True:
                     if autoreply.kind_of(m.get("content"), c["inbox_id"]): continue  # Cloudflare's auto-reply: no news
                     mins = round((rep["created_at"] - m["created_at"]) / 60)
                     events.append(f"REPLIED {cid} {name}: customer {t(m['created_at'])}, us {t(rep['created_at'])} ({mins} min, {'on time' if mins <= 10 else 'LATE'}) | {(rep.get('content') or '')[:150].replace(chr(10), ' ')}")
+            # Safety net (the user, 22 Nov 8:19pm: "a whole bunch of messages that isn't replied to"): a message
+            # that arrived while the watcher was stopped never shows up as NEW, so any chat still waiting on us
+            # after 3 minutes is reported once, whatever SINCE says.
+            if waiting and 180 < time.time() - waiting["created_at"] < 3 * 86400 and waiting["id"] not in state.setdefault("waitrep", []) \
+                    and not autoreply.cloudflares(waiting, ms, c["inbox_id"]) \
+                    and "internal" not in (c.get("labels") or []):
+                state["waitrep"].append(waiting["id"])
+                if waiting["id"] not in state["seen"] or waiting["created_at"] <= SINCE:
+                    state["seen"].append(waiting["id"])
+                    events.append(f"WAITING {cid} {name} since {t(waiting['created_at'])} | {(waiting.get('content') or '[attachment]')[:250].replace(chr(10), ' ')}")
             # pings at 10 and 20 min unanswered (the user, 21 Nov 6:47pm: "ping if I forget to reply ... 10 minutes or 20 minutes")
             age = time.time() - waiting["created_at"] if waiting else 0
             for mins, key in ((20, "late2"), (10, "late")):
@@ -130,7 +141,8 @@ while True:
                 if labels & {"paid", "no-followup"}: continue
                 # Cloudflare sends day 1 to WhatsApp claimers from 22 Nov 2:50pm (the user, 3:04pm); Claude keeps
                 # day 1 only for Duo and Instagram/Messenger claimers, and days 3 and 5 for everyone.
-                if s == 1 and r["channel"] == "WA CX" and "duo" not in labels: continue
+                # Day 1 for everyone is Claude's again since 23 Nov 1:19am (Cloudflare's follow-ups off: first message only).
+                if s == 1 and "fu1" in labels: continue  # Cloudflare already sent their day 1 before 23 Nov
                 ms =[m for m in get(f"/conversations/{r['id']}/messages")["payload"] if m["message_type"] in (0, 1) and not m.get("private")]
                 if not ms or ms[-1]["message_type"] == 0: continue  # they wrote last: that's a reply to answer, not a follow-up
                 last_c = max(m["created_at"] for m in ms if m["message_type"] == 0)

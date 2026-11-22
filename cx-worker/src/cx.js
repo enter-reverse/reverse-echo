@@ -54,7 +54,7 @@ const CHANNEL = { [INBOX.instagram]: "Instagram", [INBOX.waCx]: "WhatsApp", [INB
  * @param {number}  [deps.options.minAgeSecs] and older than this (default 0: answer on the next pass)
  */
 export async function tick({ api, options = {}, log = console.log }) {
-  const { dryRun = true, followups = false, templates = {}, alerts = null, now = Math.floor(Date.now() / 1000), freshSecs = 15 * 60, minAgeSecs = 0, maxThreads = 15, maxSends = 5 } = options;
+  const { dryRun = true, followups = false, thanks = false, templates = {}, alerts = null, now = Math.floor(Date.now() / 1000), freshSecs = 15 * 60, minAgeSecs = 0, maxThreads = 15, maxSends = 5 } = options;
   const summary = { checked: 0, autoSent: 0, followupsSent: 0, templatesSent: 0, alertsSent: 0, skipped: 0, errors: [] };
   const tag = dryRun ? "[dry run] " : "";
   let threads = 0;
@@ -128,7 +128,7 @@ export async function tick({ api, options = {}, log = console.log }) {
   // A customer who thanks us gets "You're welcome! Always happy to help :)" once in the whole chat, a minute
   // after, if they haven't written more (the user, 22 Nov 6:29pm: "just say it once in the whole chat").
   // WhatsApp, Instagram and Messenger only; never team chats, the store's WhatsApp, email, or an internal chat.
-  for (const [cid, c] of convs) {
+  for (const [cid, c] of thanks ? convs : []) {
     if (TEAM.has(cid) || c.inbox_id === INBOX.waJooChiat || c.inbox_id === INBOX.email || c.inbox_id === INBOX.web) continue;
     if ((c.labels ?? []).includes("internal")) continue;
     if ((c.last_activity_at ?? 0) <= now - 10 * 60) continue;

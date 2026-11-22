@@ -5,9 +5,21 @@ import { tick } from "./cx.js";
 import { markPaid, verify } from "./shopify.js";
 import { sendReminders } from "./reminders.js";
 import { countPass } from "./passes.js";
+import { syncLeads } from "./leads.js";
 
 /** "410, 94,433" -> [410, 94, 433]; blanks and non-numbers dropped. */
 export const convList = (v) => String(v ?? "").split(",").map((x) => Number(x.trim())).filter((n) => n > 0);
+
+export const LEAD_CRON = "*/5 * * * *";
+
+/** Meta lead form leads: into Loops, and a welcome WhatsApp (off until LEAD_FORMS and META_PAGE_TOKEN are set; the WhatsApp also needs LEAD_TEMPLATE). */
+export async function runLeads(env, now, { fetchImpl = fetch, log = console.log } = {}) {
+  if (!env.LEAD_FORMS) return null;
+  const api = createChatwoot({ token: env.CW_TOKEN, account: env.CW_ACC, fetchImpl });
+  const l = await syncLeads({ env, now, api, fetchImpl, log, dryRun: !(env.DRY_RUN === "0" || env.DRY_RUN === "false") });
+  if (l.leads || l.errors.length) log(JSON.stringify({ leadForms: l }));
+  return l;
+}
 
 export async function run(env, { fetchImpl = fetch, log = console.log, now = Math.floor(Date.now() / 1000) } = {}) {
   const api = createChatwoot({ token: env.CW_TOKEN, account: env.CW_ACC, fetchImpl });
@@ -36,6 +48,11 @@ export async function run(env, { fetchImpl = fetch, log = console.log, now = Mat
 
 export default {
   async scheduled(event, env, ctx) {
+    // The lead form run has its own cron (every 5 minutes), so its requests don't share the chat watcher's limit.
+    if (event?.cron === LEAD_CRON) {
+      ctx.waitUntil(runLeads(env, Math.floor((event?.scheduledTime ?? Date.now()) / 1000)).catch((err) => console.error(`lead forms failed: ${err.message}`)));
+      return;
+    }
     ctx.waitUntil(
       (async () => {
         try {

@@ -129,3 +129,13 @@ def cloudflares(msg, msgs, inbox):
     if any(x["message_type"] == 1 and (x.get("content") or "").startswith(opener) for x in before): return "repeat"
     return True
 
+
+_CLOSER = re.compile(r"^((ok(ay)?|okok|kk?|noted|sure|great|cool|nice|alright|got it|perfect|awesome|will do|sounds good|see you|see ya|bye|i see|ah|oh|ahh|ohh|alrighty)\s*)*((thanks?|thank you|thx|tq|ty|many thanks|thanks so much|thank you so much|appreciate it|much appreciated|cheers)(\s+(so much|a lot|zoey|again|ya|yah|yes))*)?$")
+def is_thanks(text):
+    """Same test as Cloudflare's isThanks (cx-worker cx.js): Cloudflare answers these with "You're welcome!"
+    once per chat, so the watcher leaves them alone (the user, 22 Nov 6:29pm)."""
+    raw = text or ""
+    if "?" in raw: return False
+    t = re.sub(r"\s+", " ", re.sub(r"[^\w\s]|[\d_]", " ", raw.lower())).strip()
+    return bool(t) and len(t) <= 40 and bool(_CLOSER.match(t)) and bool(re.search(r"\b(thanks?|thank you|thx|tq|ty|appreciate|cheers)\b", raw, re.I))
+

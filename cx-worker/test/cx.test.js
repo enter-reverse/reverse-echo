@@ -346,3 +346,11 @@ test("the day-1 follow-up never goes out at night, and a small-hours claimer get
   assert.equal(await at(3.5, 8), 0, "7:30pm, claimed at 11:30am: tomorrow morning is still in time");
   assert.equal(await at(1, 14), 0, "5pm, claimed at 3am: not yet the last two hours of the evening");
 });
+
+test("a claim that starts an Instagram DM (from a chat ad) gets the claim reply, but no WhatsApp follow-ups", async () => {
+  const text = "Hi Zoey! I'd like to claim my $100 off Red Light, $199 for my first month.";
+  const f = fake({ open: [conv(8, INBOX.instagram, "Mei Ling")], threads: { 8: [msg(1, 0, text, 30)] } });
+  await go(f);
+  assert.deepEqual(f.sent.map((x) => x.cid), [8]);
+  assert.match(f.sent[0].content, /Red Light/);
+});

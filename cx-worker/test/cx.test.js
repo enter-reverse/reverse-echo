@@ -363,7 +363,14 @@ test("the Red Light ad's 'find out more' tap gets the nameless enquiry reply and
   const f = fake({ open: [conv(9, INBOX.instagram, "Mei Ling")], threads: { 9: [msg(1, 0, text, 30)] } });
   await go(f);
   assert.deepEqual(f.sent.map((x) => x.cid), [9]);
-  assert.ok(f.sent[0].content.startsWith("Hey! Our red light bed is full-body"));
+  assert.ok(f.sent[0].content.startsWith("Hey! I'm Zoey from Reverse. Our red light bed is full-body"));
   assert.ok(!f.sent[0].content.includes("Mei"));
   assert.ok(f.sent[0].content.endsWith("- Zoey"));
+});
+
+test("the 'Hi Reverse Team!' taps: find out more gets the enquiry reply, claim gets the Red Light claim reply", async () => {
+  assert.equal(kindOf("Hi Reverse Team! I'd like to find out more about the red light experience!", INBOX.instagram), "red_info");
+  assert.equal(kindOf("Hi Reverse Team! I'd like to claim my $100 off Red Light.", INBOX.instagram), "red");
+  assert.equal(kindOf("Hi Reverse Team! I'd like to claim my $100 off Red Light.", INBOX.email), null);
+  assert.equal(kindOf("Hi Reverse Team! I'd like to claim my $100 off Red Light. When can I come?", INBOX.instagram), null);
 });

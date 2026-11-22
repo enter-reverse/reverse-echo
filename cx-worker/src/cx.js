@@ -90,7 +90,7 @@ export async function tick({ api, options = {}, log = console.log }) {
       read.delete(cid); // answered: nothing to alert about
       summary.autoSent++;
       log(`AUTO-SENT ${kind} reply in conversation ${cid}`);
-      await api.addLabels(cid, kind === "trial" ? ["trial"] : kind === "duo" ? ["claim", "duo"] : ["claim"]).catch((e) =>
+      await api.addLabels(cid, kind === "trial" ? ["trial"] : kind === "red_info" ? ["enquiry"] : kind === "duo" ? ["claim", "duo"] : ["claim"]).catch((e) =>
         summary.errors.push(`labels on ${cid}: ${e.message}`),
       );
     } catch (err) {

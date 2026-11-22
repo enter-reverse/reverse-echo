@@ -90,6 +90,14 @@ export function tpl(kind, name) {
         "- 10 credits each a month from month 4, same price\n\n" +
         "Any questions, just ask me here :)\n\n- Zoey"
       );
+    case "red_info":
+      // The "find out more" tap on the Red Light chat ad (the user, 22 Nov 2026): no name, a warm opener and one
+      // question, so the CX manager can take it from their answer.
+      return (
+        "Hey! I'm Zoey from Reverse. Our Redlight bed is full-body: you lie back for 20 minutes in your own private room. " +
+        "Most people come for their skin (fine lines, firmness) or for recovery.\n\n" +
+        "What are you hoping it helps with? I'll tell you how people use it and what it costs to try.\n\n- Zoey"
+      );
     default:
       return null;
   }
@@ -102,6 +110,11 @@ export function kindOf(text, inbox) {
   const t = String(text ?? "").trim();
   if (/^[^\p{L}\p{N}]*trial[^\p{L}\p{N}]*$/iu.test(t)) return "trial";
   if (!CLAIM_INBOXES.has(inbox)) return null;
+  // The Red Light chat ad's two taps (22 Nov 2026). The person's tap says "Hi Reverse Team!" and our reply
+  // introduces Zoey (the user: "just put Hi Reverse Team! then thats where we'll introduce ourself").
+  if (/^(Hi Reverse Team!? )?I['’]d like to (find out|know) more about the red ?light experience( at Reverse)?!?$/i.test(t)) return "red_info";
+  const tapClaim = t.match(/^Hi Reverse Team!? I['’]d like to claim my \$\d+ off (HBOT|Red ?Light|Contrast|Dry Float)\.?$/i);
+  if (tapClaim) return THERAPY[Object.keys(THERAPY).find((k) => k.replace(" ", "").toLowerCase() === tapClaim[1].replace(" ", "").toLowerCase())];
   if (/^Hi Zoey! We'd like to claim our \$\d+ off HBOT for two/.test(t)) return "duo";
   const m = t.match(/^Hi Zoey! I'd like to claim my \$\d+ off (HBOT|Red Light|Contrast|Dry Float), \$\d+ for my first month\./);
   return m ? THERAPY[m[1]] : null;

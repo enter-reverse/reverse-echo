@@ -354,3 +354,16 @@ test("a claim that starts an Instagram DM (from a chat ad) gets the claim reply,
   assert.deepEqual(f.sent.map((x) => x.cid), [8]);
   assert.match(f.sent[0].content, /Red Light/);
 });
+
+test("the Red Light ad's 'find out more' tap gets the nameless enquiry reply and an enquiry label, not a claim", async () => {
+  const text = "I'd like to find out more about the red light experience at Reverse!";
+  assert.equal(kindOf(text, INBOX.instagram), "red_info");
+  assert.equal(kindOf(text.replace("'", "’"), INBOX.waCx), "red_info");
+  assert.equal(kindOf("I'd like to find out more about the red light experience at Reverse! Is it safe?", INBOX.instagram), null);
+  const f = fake({ open: [conv(9, INBOX.instagram, "Mei Ling")], threads: { 9: [msg(1, 0, text, 30)] } });
+  await go(f);
+  assert.deepEqual(f.sent.map((x) => x.cid), [9]);
+  assert.ok(f.sent[0].content.startsWith("Hey! Our red light bed is full-body"));
+  assert.ok(!f.sent[0].content.includes("Mei"));
+  assert.ok(f.sent[0].content.endsWith("- Zoey"));
+});

@@ -90,6 +90,14 @@ export function tpl(kind, name) {
         "- 10 credits each a month from month 4, same price\n\n" +
         "Any questions, just ask me here :)\n\n- Zoey"
       );
+    case "red_info":
+      // The "find out more" tap on the Red Light chat ad (the user, 22 Nov 2026): no name, a warm opener and one
+      // question, so the CX manager can take it from their answer.
+      return (
+        "Hey! Our red light bed is full-body: you lie back for 20 minutes in your own private room. " +
+        "Most people come for their skin (fine lines, firmness) or for recovery.\n\n" +
+        "What are you hoping it helps with? I'll tell you how people use it and what it costs to try.\n\n- Zoey"
+      );
     default:
       return null;
   }
@@ -102,6 +110,8 @@ export function kindOf(text, inbox) {
   const t = String(text ?? "").trim();
   if (/^[^\p{L}\p{N}]*trial[^\p{L}\p{N}]*$/iu.test(t)) return "trial";
   if (!CLAIM_INBOXES.has(inbox)) return null;
+  // The Red Light chat ad's "find out more" tap (22 Nov 2026).
+  if (/^I['’]d like to find out more about the red light experience at Reverse!?$/i.test(t)) return "red_info";
   if (/^Hi Zoey! We'd like to claim our \$\d+ off HBOT for two/.test(t)) return "duo";
   const m = t.match(/^Hi Zoey! I'd like to claim my \$\d+ off (HBOT|Red Light|Contrast|Dry Float), \$\d+ for my first month\./);
   return m ? THERAPY[m[1]] : null;

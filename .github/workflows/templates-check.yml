@@ -1,0 +1,27 @@
+# Lists the WhatsApp message templates Chatwoot knows for the CX number, with Meta's status for each.
+# Day 3 and day 5 follow-ups need "claim_followup_day3" and "claim_followup_day5" to be APPROVED.
+# Run by hand: Actions -> templates-check -> Run workflow. Read-only; prints names and statuses only.
+
+name: templates-check
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  list:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: List the CX number's templates
+        env:
+          CW_TOKEN: ${{ secrets.CHATWOOT_TOKEN }}
+          CW_ACC: ${{ secrets.CHATWOOT_ACCOUNT_ID }}
+          INBOX: "156990"
+        run: |
+          test -n "$CW_TOKEN" -a -n "$CW_ACC" || { echo "::error::CHATWOOT_TOKEN / CHATWOOT_ACCOUNT_ID are not set"; exit 1; }
+          curl -sS "https://app.chatwoot.com/api/v1/accounts/$CW_ACC/inboxes/$INBOX" -H "api_access_token: $CW_TOKEN" > inbox.json
+          echo "channel: $(jq -r '.channel_type // "?"' inbox.json), provider: $(jq -r '.provider // "?"' inbox.json)"
+          echo "templates: $(jq -r '(.message_templates // []) | length' inbox.json), last synced: $(jq -r '.message_templates_last_updated // "?"' inbox.json)"
+          jq -r '(.message_templates // [])[] | "template: \(.name) | \(.status) | \(.language) | \(.category)"' inbox.json | sort

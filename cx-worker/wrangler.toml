@@ -39,6 +39,8 @@ REMINDER_CONVERSATIONS = "410,94,433"
 # The day Echo's Instagram token runs out (generated 21 Nov 2026, about 60 days). Reminders start 10 days before.
 # After renewing the token, set this to the new date.
 IG_TOKEN_EXPIRES = "2027-01-20"
+# Meta lead forms copied into Loops ("id:name", comma-separated). Needs the META_PAGE_TOKEN and LOOPS_API_KEY secrets.
+LEAD_FORMS = "980030121464233:Redlight lead form (H12)"
 
 # Secrets (set by the deploy workflow, never committed): CW_TOKEN, CW_ACC, SHOPIFY_WEBHOOK_SECRET
 

@@ -5,6 +5,7 @@ import { tick } from "./cx.js";
 import { markPaid, verify } from "./shopify.js";
 import { sendReminders } from "./reminders.js";
 import { countPass } from "./passes.js";
+import { syncLeads } from "./leads.js";
 
 /** "410, 94,433" -> [410, 94, 433]; blanks and non-numbers dropped. */
 export const convList = (v) => String(v ?? "").split(",").map((x) => Number(x.trim())).filter((n) => n > 0);
@@ -43,6 +44,11 @@ export default {
           // One line per pass, so the log shows the watcher is alive and reaching Chatwoot.
           console.log(JSON.stringify({ dryRun: !(env.DRY_RUN === "0" || env.DRY_RUN === "false"), ...counts }));
           for (const e of errors) console.warn(`warning: ${e}`);
+          // Meta lead form leads into Loops, every 10 minutes (off until LEAD_FORMS, META_PAGE_TOKEN and LOOPS_API_KEY are set).
+          if (Math.floor(now / 60) % 10 === 7 && env.LEAD_FORMS) {
+            const l = await syncLeads({ env, now, dryRun: !(env.DRY_RUN === "0" || env.DRY_RUN === "false") });
+            if (l.leads || l.errors.length) console.log(JSON.stringify({ leadForms: l }));
+          }
           // Dated reminders to the team (10:00am Singapore time only).
           if (env.REMINDER_CONVERSATIONS) {
             await sendReminders({ api: createChatwoot({ token: env.CW_TOKEN, account: env.CW_ACC }), env, now, dryRun: !(env.DRY_RUN === "0" || env.DRY_RUN === "false") });

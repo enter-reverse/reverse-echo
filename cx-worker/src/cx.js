@@ -86,7 +86,8 @@ export async function tick({ api, options = {}, log = console.log }) {
       if (dryRun) { log(`${tag}would send the ${kind} reply in conversation ${cid}`); continue; }
       // Look once more immediately before sending, in case a reply landed while this pass was running.
       if ((await api.messages(cid)).some((m) => m.message_type === 1)) continue;
-      await api.send(cid, tpl(kind, firstName(sender(c).name)));
+      // No name on Instagram: display names there are handles, emojis or nicknames (the user, 22 Nov 2026).
+      await api.send(cid, tpl(kind, c.inbox_id === INBOX.instagram ? "" : firstName(sender(c).name)));
       read.delete(cid); // answered: nothing to alert about
       summary.autoSent++;
       log(`AUTO-SENT ${kind} reply in conversation ${cid}`);

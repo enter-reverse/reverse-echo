@@ -377,3 +377,10 @@ test("the 'Hi Reverse Team!' taps: find out more gets the enquiry reply, claim g
   assert.equal(kindOf("Hi Reverse Team! I'd like to claim my $100 off Red Light.", INBOX.email), null);
   assert.equal(kindOf("Hi Reverse Team! I'd like to claim my $100 off Red Light. When can I come?", INBOX.instagram), null);
 });
+
+test("Instagram replies never use a name: the claim reply opens with plain 'Hi'", async () => {
+  const f = fake({ open: [conv(12, INBOX.instagram, "Mei Ling")], threads: { 12: [msg(1, 0, "Hi Reverse Team! I'd like to claim my $100 off Redlight.", 30)] } });
+  await go(f);
+  assert.ok(f.sent[0].content.startsWith("Hi, you're in!"));
+  assert.ok(!f.sent[0].content.includes("Mei"));
+});

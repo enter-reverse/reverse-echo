@@ -95,10 +95,11 @@ export function tpl(kind, name) {
       // question, so the CX manager can take it from their answer.
       return (
         // Introduces Zoey once, so no "- Zoey" sign-off; benefits stay general, no named results or figures
-        // (the user, 22 Nov 6:08pm: "how come u introduce yourself 2 times ... just say general benefits").
+        // (the user, 22 Nov 6:08pm: "how come u introduce yourself 2 times ... just say general benefits"). Ends on the
+        // question alone (the user, 22 Nov 8:25pm: "just ask the question, that's all").
         "Hey! I'm Zoey from Reverse. Our Redlight bed is full-body: you lie back for 20 minutes in your own private room. " +
         "Most people come for their skin or for recovery.\n\n" +
-        "What are you hoping it helps with? I'll tell you how people use it and what it costs to try."
+        "What are you looking to work on?"
       );
     default:
       return null;

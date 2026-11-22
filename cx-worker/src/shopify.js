@@ -44,6 +44,44 @@ export async function markPaid({ api, order, dryRun = false, log = console.log }
       }
     }
   }
-  log(`${dryRun ? "[dry run] " : ""}Shopify order paid: ${result.matchedContacts} matching contact(s), ${result.labelled} conversation(s) labelled paid`);
+  // No phone or email match (an order with no phone, or paid with other details): fall back to the buyer's name,
+  // so a follow-up never nudges someone who has paid (the user, 22 Nov). Only a claim or TRIAL chat from the last
+  // 14 days counts, and only when exactly one such chat matches the name, so a common name labels no one.
+  if (!result.matchedContacts) {
+    const named = await nameMatch({ api, order });
+    if (named) {
+      result.matchedContacts = 1;
+      result.byName = true;
+      if (!(named.labels ?? []).includes("paid")) {
+        if (!dryRun) {
+          await api.addLabels(named.id, ["paid"]);
+          await api.note?.(named.id, `Labelled paid by name: Shopify order ${order?.name ?? ""} had no matching phone or email.`).catch(() => {});
+        }
+        result.labelled++;
+      }
+    }
+  }
+  log(`${dryRun ? "[dry run] " : ""}Shopify order paid: ${result.matchedContacts} matching contact(s)${result.byName ? " by name" : ""}, ${result.labelled} conversation(s) labelled paid`);
   return result;
+}
+
+const norm = (s) => String(s ?? "").toLowerCase().replace(/[^a-z\s]/g, " ").replace(/\s+/g, " ").trim();
+
+/** The one recent claim/TRIAL conversation whose contact's name matches the order's buyer, or null. */
+export async function nameMatch({ api, order, now = Math.floor(Date.now() / 1000) }) {
+  const first = norm(order?.customer?.first_name ?? order?.billing_address?.first_name);
+  const last = norm(order?.customer?.last_name ?? order?.billing_address?.last_name);
+  if (!first) return null;
+  const full = last ? `${first} ${last}` : first;
+  const hits = [];
+  for (const contact of (await api.searchContacts(first)).slice(0, 15)) {
+    const n = norm(contact.name);
+    // The chat name is the full name, or just the first name (WhatsApp and Instagram often show only that).
+    if (n !== full && n !== first && !(last && n === `${last} ${first}`)) continue;
+    for (const conv of (await api.contactConversations(contact.id)).slice(0, 10)) {
+      const recent = (conv.last_activity_at ?? 0) > now - 14 * 86400;
+      if (recent && (conv.labels ?? []).some((l) => l === "claim" || l === "trial")) hits.push(conv);
+    }
+  }
+  return hits.length === 1 ? hits[0] : null;
 }

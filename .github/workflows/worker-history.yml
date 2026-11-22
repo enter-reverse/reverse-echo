@@ -1,0 +1,54 @@
+# Looks back through a Worker's stored log for lines containing a word (for example "Shopify" or "AUTO-SENT").
+# worker-logs only shows what happens while it listens; this one answers "did it happen earlier today?".
+# Run by hand: Actions -> worker-history -> Run workflow. Read-only.
+
+name: worker-history
+on:
+  workflow_dispatch:
+    inputs:
+      script:
+        description: "Worker name"
+        type: choice
+        options: [reverse-cx, reverse-echo]
+        default: reverse-cx
+      needle:
+        description: "Show log lines containing this"
+        type: string
+        default: "Shopify"
+      hours:
+        description: "How many hours back"
+        type: string
+        default: "24"
+
+permissions:
+  contents: read
+
+jobs:
+  query:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Query the stored log
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCOUNT: 7fae655d2b641cfe15a087237ef43b19
+          SCRIPT: ${{ inputs.script }}
+          NEEDLE: ${{ inputs.needle }}
+          HOURS: ${{ inputs.hours }}
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo "::error::CLOUDFLARE_API_TOKEN is not set"; exit 1; }
+          case "$HOURS" in ''|*[!0-9]*) HOURS=24;; esac
+          TO=$(($(date +%s) * 1000)); FROM=$((TO - HOURS * 3600 * 1000))
+          BODY=$(jq -n --arg s "$SCRIPT" --arg n "$NEEDLE" --argjson from "$FROM" --argjson to "$TO" '{
+            queryId: "worker-history", view: "events", limit: 100, timeframe: {from: $from, to: $to},
+            parameters: {datasets: ["cloudflare-workers"], filters: [
+              {key: "$workers.scriptName", operation: "eq", type: "string", value: $s},
+              {key: "$metadata.message", operation: "includes", type: "string", value: $n}]}}')
+          curl -sS -X POST "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT/workers/observability/telemetry/query" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json" --data "$BODY" > out.json
+          echo "success: $(jq -r '.success' out.json)"
+          jq -r '.errors // [] | .[] | "error: \(.code) \(.message)"' out.json
+          # One line per matching log line: time (UTC) and the message.
+          jq -r '(.result.events.events // [])[] | "\(.timestamp / 1000 | todate) \(."$metadata".message // .source.message // "")"' out.json | sort | cut -c1-300
+          echo "matches: $(jq -r '(.result.events.events // []) | length' out.json)"
+          jq -r 'if (.result.events.events // []) | length == 0 then "shape: " + (.result | tostring | .[0:600]) else empty end' out.json

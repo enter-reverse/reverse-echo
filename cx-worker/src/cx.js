@@ -109,7 +109,10 @@ export async function tick({ api, options = {}, log = console.log }) {
       // Look once more immediately before sending, in case a reply landed while this pass was running.
       if ((await api.messages(cid)).some((m) => m.message_type === 1 && (!returning || m.created_at >= hit.created_at))) continue;
       // No name on Instagram: display names there are handles, emojis or nicknames (the user, 22 Nov 2026).
-      await api.send(cid, tpl(kind, c.inbox_id === INBOX.instagram ? "" : firstName(sender(c).name)));
+      // No "- Zoey" on Instagram: Echo's TRIAL DM goes straight through Instagram (Chatwoot never sees it) and has
+      // usually signed as Zoey already (the user, 22 Nov 8:16pm: no double sign-off, anywhere).
+      const body = tpl(kind, c.inbox_id === INBOX.instagram ? "" : firstName(sender(c).name));
+      await api.send(cid, c.inbox_id === INBOX.instagram ? body.replace(/\n+\s*-\s*Zoey\s*$/i, "") : body);
       read.delete(cid); // answered: nothing to alert about
       summary.autoSent++;
       log(`AUTO-SENT ${kind} reply in conversation ${cid}`);

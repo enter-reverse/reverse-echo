@@ -13,3 +13,16 @@ test("questions, requests and attachments still do", () => {
     assert.equal(isCloser(s), false, s);
   }
 });
+
+import { firstName } from "../src/templates.js";
+test("two-word Chinese given names keep both words; other names give the first word", () => {
+  assert.equal(firstName("Joo Leong"), "Joo Leong");
+  assert.equal(firstName("jia xuan"), "Jia Xuan");
+  assert.equal(firstName("Wan Qing"), "Wan Qing");
+  assert.equal(firstName("Tan Joo Leong"), "Joo Leong");
+  assert.equal(firstName("Rohan Raj"), "Rohan");
+  assert.equal(firstName("Stacey"), "Stacey");
+  assert.equal(firstName("Murni Samad"), "Murni");
+  assert.equal(firstName("Yeoh Wan Qing"), "Wan Qing");
+  assert.equal(firstName("bold-sun-48"), "");
+});

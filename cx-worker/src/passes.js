@@ -125,7 +125,10 @@ export function lastTotal(messages, base) {
 
 /** Runs on each paid Shopify order. Sends at most one message; never twice for the same order. */
 export async function countPass({ api, order, env, dryRun = false, now = Math.floor(Date.now() / 1000), log = console.log }) {
-  const conv = Number(env.PASS_ALERT_CONV || 0);
+  // Several chats, comma-separated ("410,94,433": Elijah, Andre, Gordon; the user, 22 Nov). The first holds the
+  // running total and the record of which orders were already counted; everyone gets the same message.
+  const convs = String(env.PASS_ALERT_CONV ?? "").split(",").map((x) => Number(x.trim())).filter((x) => x > 0);
+  const conv = convs[0] ?? 0;
   const { kind, n } = passDelta(order);
   if (!conv || !n) { if (kind) log(`pass counter: order ${order?.name} is ${kind}, not counted`); return { counted: 0 }; }
 
@@ -135,16 +138,27 @@ export async function countPass({ api, order, env, dryRun = false, now = Math.fl
   const total = lastTotal(ms, Number(env.PASS_BASE_TOTAL || 0)) + n;
   const name = firstWord(order.customer?.first_name) || firstWord(order.billing_address?.first_name) || "someone";
   const text = [`🎉 New pass: ${name}, ${kind}`, `Total: ${total}`, "", ...(await journey({ api, order, now })).flatMap((l) => [l, ""]), tag].join("\n").trim();
+  if (dryRun) { log(`[dry run] pass counter would send to ${convs.join(", ")}:\n${text}`); return { counted: n, sent: false, total }; }
 
-  // WhatsApp lets us write only within 24 hours of the user's own last message to this number.
-  const lastFromUser = Math.max(0, ...ms.filter((m) => m.message_type === 0 && !m.private).map((m) => m.created_at));
-  if (now - lastFromUser > DAY - 300) {
-    log(`pass counter: ${tag} not sent, the user's 24-hour window is closed (total now ${total})`);
-    if (!dryRun) await api.note(conv, `Not sent (WhatsApp window closed):\n\n${text}`).catch(() => {});
-    return { counted: n, sent: false, total };
+  let sentPrimary = false;
+  for (const to of convs) {
+    const theirs = to === conv ? ms : await api.allMessages(to).catch(() => []);
+    // WhatsApp lets us write only within 24 hours of that person's own last message to this number.
+    const lastFromThem = Math.max(0, ...theirs.filter((m) => m.message_type === 0 && !m.private).map((m) => m.created_at));
+    if (now - lastFromThem > DAY - 300) {
+      log(`pass counter: ${tag} not sent to ${to}, 24-hour window closed (total now ${total})`);
+      // The first chat always keeps a note, so the total and the "already counted" record survive.
+      if (to === conv) await api.note(conv, `Not sent (WhatsApp window closed):\n\n${text}`).catch(() => {});
+      continue;
+    }
+    try {
+      await api.send(to, text);
+      if (to === conv) sentPrimary = true;
+    } catch (err) {
+      log(`pass counter: ${tag} to ${to} failed: ${err.message}`);
+      if (to === conv) await api.note(conv, `Not sent (${err.message}):\n\n${text}`).catch(() => {});
+    }
   }
-  if (dryRun) { log(`[dry run] pass counter would send:\n${text}`); return { counted: n, sent: false, total }; }
-  await api.send(conv, text);
-  log(`pass counter: ${tag} sent, total ${total}`);
-  return { counted: n, sent: true, total };
+  log(`pass counter: ${tag} done, total ${total}`);
+  return { counted: n, sent: sentPrimary, total };
 }

@@ -23,7 +23,10 @@ if last.get("id") != answering:
     why = "team replied" if last.get("message_type") == 1 else "customer wrote again"
     line = f"{stamp} SAFE-SKIP {cid}: {why}, not sent"
 else:
-    mid, status = a.send_and_check(cid, text)
-    line = f"{stamp} SAFE-SENT {cid} (msg {mid}, {status}) | {text[:120].replace(chr(10), ' ')}"
+    try:
+        mid, status = a.send_and_check(cid, text)
+        line = f"{stamp} SAFE-SENT {cid} (msg {mid}, {status}) | {text[:120].replace(chr(10), ' ')}"
+    except a.Blocked as e:
+        line = f"{stamp} SAFE-BLOCKED {cid}: {e} | not sent, flag it to the user"
 open(a.LOG, "a").write(line + "\n")
 print(line)

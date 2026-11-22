@@ -206,14 +206,15 @@ export async function tick({ api, options = {}, log = console.log }) {
     }
   }
   // ---- 4. alerts -------------------------------------------------------------------
-  if (alerts?.conversation) {
+  const alertTo = alerts ? (alerts.conversations ?? [alerts.conversation]).filter(Boolean) : [];
+  if (alertTo.length) {
     const MIN = 60;
     // `now` is the minute Cloudflare scheduled this pass for, so consecutive passes look at back-to-back
     // one-minute slices and each waiting message crosses each mark in exactly one of them.
     const crossed = (m, mins) => m.created_at > now - (mins + 1) * MIN && m.created_at <= now - mins * MIN;
     let looked = 0;
     for (const [cid, c] of convs) {
-      if (TEAM.has(cid) || cid === alerts.conversation || c.inbox_id === INBOX.waJooChiat) continue;
+      if (TEAM.has(cid) || alertTo.includes(cid) || c.inbox_id === INBOX.waJooChiat) continue;
       if ((c.last_activity_at ?? 0) <= now - 22 * MIN) continue; // nothing here can be crossing a mark
       if (c.inbox_id === INBOX.email && EMAIL_NOISE.some((n) => (sender(c).email ?? "").toLowerCase().includes(n))) continue;
       try {
@@ -240,13 +241,18 @@ export async function tick({ api, options = {}, log = console.log }) {
         const said = String(waiting.content ?? "").trim().replace(/\s+/g, " ").slice(0, 300) || "[attachment]";
         const at = new Date((waiting.created_at + 8 * HOUR) * 1000).toISOString().slice(11, 16);
         const link = alerts.account ? `\n\nhttps://app.chatwoot.com/app/accounts/${alerts.account}/conversations/${cid}` : "";
-        try {
-          await api.send(alerts.conversation, `${what}\n\n${sender(c).name || "Someone"} on ${CHANNEL[c.inbox_id] ?? "chat"}, since ${at}\n\n"${said}"${link}`);
-          summary.alertsSent++;
-        } catch (err) {
-          // Most likely the owner's 24-hour WhatsApp window has closed; the log line above still records it.
-          summary.errors.push(`ALERT NOT DELIVERED for conversation ${cid}: ${err.message}`);
+        const text = `${what}\n\n${sender(c).name || "Someone"} on ${CHANNEL[c.inbox_id] ?? "chat"}, since ${at}\n\n"${said}"${link}`;
+        let sent = false;
+        for (const to of alertTo) {
+          try {
+            await api.send(to, text);
+            sent = true;
+          } catch (err) {
+            // Most likely that person's 24-hour WhatsApp window has closed; the others still get it.
+            summary.errors.push(`ALERT NOT DELIVERED for conversation ${cid} to ${to}: ${err.message}`);
+          }
         }
+        if (sent) summary.alertsSent++;
       } catch (err) {
         summary.errors.push(`alert check ${cid}: ${err.message}`);
       }

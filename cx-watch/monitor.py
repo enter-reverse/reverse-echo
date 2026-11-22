@@ -20,7 +20,7 @@ NOISE = ("noreply", "no-reply", "no_reply", "classpass", "intercom", "loops.so",
          "youform", "shopify", "apple.com", "spotify", "google.com", "notifications", "mailer",
          "reallygoodemails", "paddle.com", "newsletter", "news@", "updates@", "info@")
 
-TEAM = {158}  # internal chats (Andre)
+TEAM = {158, 410, 94, 433}  # internal chats (Andre; 410 = the user, for alerts)
 
 def get(p):
     r = urllib.request.Request(B + p, headers={"api_access_token": env["CW_TOKEN"]})
@@ -38,7 +38,16 @@ while True:
             for c in get(f"/conversations?status={s}&assignee_type=all&page=1")["data"]["payload"]:
                 convs[c["id"]] = c
         for cid, c in convs.items():
-            if c["last_activity_at"] <= SINCE or cid in TEAM: continue
+            if c["last_activity_at"] <= SINCE: continue
+            if cid in (410, 94, 433):
+                # Elijah's and Andre's chats with the Zoey number (the user, 22 Nov 14:57): their messages
+                # (e.g. "any more messages to resolve?") come to Claude, who answers both with the open items.
+                for m in get(f"/conversations/{cid}/messages")["payload"]:
+                    if m["message_type"] == 0 and not m.get("private") and m["created_at"] > SINCE and m["id"] not in state["seen"]:
+                        state["seen"].append(m["id"])
+                        events.append(f"TEAM-MSG {cid} {c['meta']['sender'].get('name')} {t(m['created_at'])} | {(m.get('content') or '[attachment]')[:250].replace(chr(10), ' ')}")
+                continue
+            if cid in TEAM: continue
             if c["inbox_id"] == 157353: continue  # Joo Chiat WhatsApp: the store handles it (the user, 20 Nov 4:57pm)
             if c["inbox_id"] == 156786:
                 em = (c["meta"]["sender"].get("email") or "").lower()
@@ -49,15 +58,21 @@ while True:
             for m in ms:
                 if m["message_type"] == 0 and m["created_at"] > SINCE and m["id"] not in state["seen"]:
                     state["seen"].append(m["id"])
+                    # TRIAL and website claims: Cloudflare (reverse-echo cx-worker) is the only sender now
+                    # (the user, 22 Nov 00:49). Track the claim for follow-ups, say nothing, send nothing.
+                    if autoreply.kind_of(m.get("content"), c["inbox_id"]):
+                        dashboard.add_claim(cid)
+                        continue
                     events.append(f"NEW {cid} {name} {t(m['created_at'])} | {(m.get('content') or '[attachment]')[:250].replace(chr(10), ' ')}")
-                    try:
-                        auto = autoreply.maybe_reply(cid, c["inbox_id"], name, m, ms)
-                    except Exception as e:
-                        auto = f"AUTO-SEND FAILED {cid} {name}: {e}"
-                    if auto:
-                        events.append(auto)
-                        ms = [x for x in get(f"/conversations/{cid}/messages")["payload"] if x["message_type"] in (0, 1) and not x.get("private")]
-                    if autoreply.kind_of(m.get("content"), c["inbox_id"]): dashboard.add_claim(cid)
+            # a TRIAL or claim Cloudflare still hasn't answered after 5 minutes: flag it
+            for i, m in enumerate(ms):
+                if m["message_type"] != 0 or not autoreply.kind_of(m.get("content"), c["inbox_id"]): continue
+                if any(x["message_type"] == 1 for x in ms[i+1:]): continue
+                age = time.time() - m["created_at"]
+                if 300 < age < 6 * 3600 and m["id"] not in state.setdefault("noauto", []):
+                    state["noauto"].append(m["id"])
+                    # Cloudflare sends this alarm to the user's WhatsApp since 22 Nov 02:26 (the user); kept as a record only.
+                    if False: events.append(f"NO AUTO-REPLY 5+ min {cid} {name} since {t(m['created_at'])}: Cloudflare hasn't answered | {(m.get('content') or '')[:150].replace(chr(10), ' ')}")
             # oldest customer message that is still waiting (no reply from us after it)
             waiting = None
             for m in ms:
@@ -71,6 +86,7 @@ while True:
                 prev_cust = i > 0 and ms[i-1]["message_type"] == 0
                 if rep and key not in state["answered"] and not prev_cust:
                     state["answered"].append(key)
+                    if autoreply.kind_of(m.get("content"), c["inbox_id"]): continue  # Cloudflare's auto-reply: no news
                     mins = round((rep["created_at"] - m["created_at"]) / 60)
                     events.append(f"REPLIED {cid} {name}: customer {t(m['created_at'])}, us {t(rep['created_at'])} ({mins} min, {'on time' if mins <= 10 else 'LATE'}) | {(rep.get('content') or '')[:150].replace(chr(10), ' ')}")
             # pings at 10 and 20 min unanswered (the user, 21 Nov 6:47pm: "ping if I forget to reply ... 10 minutes or 20 minutes")
@@ -80,7 +96,8 @@ while True:
                         and not dashboard.answered_elsewhere(get, cid, name, waiting["created_at"]):
                     state["late"].append(waiting["id"]) if key == "late2" and waiting["id"] not in state["late"] else None
                     state[key].append(waiting["id"])
-                    events.append(f"UNANSWERED {mins}+ min {cid} {name} since {t(waiting['created_at'])} | {(waiting.get('content') or '[attachment]')[:200].replace(chr(10), ' ')}")
+                    # Cloudflare sends the 10/20 min pings to the user's WhatsApp since 22 Nov 02:26 (the user); record only.
+                    if False: events.append(f"UNANSWERED {mins}+ min {cid} {name} since {t(waiting['created_at'])} | {(waiting.get('content') or '[attachment]')[:200].replace(chr(10), ' ')}")
                     break
     except Exception as e:
         print("error:", e, flush=True)
@@ -95,7 +112,12 @@ while True:
                 s, key = r.get("next"), f"{r['id']}:d{r.get('next')}"
                 if not s or key in state.setdefault("fu_alerted", []): continue
                 if time.time() < r["claimedAt"] + 20 * 3600: continue
-                ms = [m for m in get(f"/conversations/{r['id']}/messages")["payload"] if m["message_type"] in (0, 1) and not m.get("private")]
+                labels = set(get(f"/conversations/{r['id']}").get("labels") or [])
+                if labels & {"paid", "no-followup"}: continue
+                # Cloudflare sends day 1 to WhatsApp claimers from 22 Nov 2:50pm (the user, 3:04pm); Claude keeps
+                # day 1 only for Duo and Instagram/Messenger claimers, and days 3 and 5 for everyone.
+                if s == 1 and r["channel"] == "WA CX" and "duo" not in labels: continue
+                ms =[m for m in get(f"/conversations/{r['id']}/messages")["payload"] if m["message_type"] in (0, 1) and not m.get("private")]
                 if not ms or ms[-1]["message_type"] == 0: continue  # they wrote last: that's a reply to answer, not a follow-up
                 last_c = max(m["created_at"] for m in ms if m["message_type"] == 0)
                 ig = r["channel"] == "Instagram"

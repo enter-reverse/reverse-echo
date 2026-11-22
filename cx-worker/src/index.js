@@ -6,6 +6,9 @@ import { markPaid, verify } from "./shopify.js";
 import { sendReminders } from "./reminders.js";
 import { countPass } from "./passes.js";
 
+/** "410, 94,433" -> [410, 94, 433]; blanks and non-numbers dropped. */
+export const convList = (v) => String(v ?? "").split(",").map((x) => Number(x.trim())).filter((n) => n > 0);
+
 export async function run(env, { fetchImpl = fetch, log = console.log, now = Math.floor(Date.now() / 1000) } = {}) {
   const api = createChatwoot({ token: env.CW_TOKEN, account: env.CW_ACC, fetchImpl });
   return tick({
@@ -21,7 +24,9 @@ export async function run(env, { fetchImpl = fetch, log = console.log, now = Mat
         ? { day3: env.FOLLOWUP_DAY3 === "on", day5: env.FOLLOWUP_DAY5 === "on", language: env.TEMPLATE_LANGUAGE }
         : {},
       // Alerts go to the owner's own WhatsApp chat with the CX line (a Chatwoot conversation id).
-      alerts: env.ALERTS === "on" && Number(env.ALERT_CONVERSATION) ? { conversation: Number(env.ALERT_CONVERSATION), account: env.CW_ACC } : null,
+      // Several chats, comma-separated ("410,94,433": Elijah, Andre, Gordon); everyone gets the same alert (the user, 22 Nov).
+      alerts: env.ALERTS === "on" && convList(env.ALERT_CONVERSATION).length
+        ? { conversations: convList(env.ALERT_CONVERSATION), account: env.CW_ACC } : null,
       now,
     },
   });

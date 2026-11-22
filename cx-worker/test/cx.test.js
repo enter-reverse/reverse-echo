@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { INBOX, TEMPLATES, firstName, followup1, kindOf, tpl } from "../src/templates.js";
-import { tick } from "../src/cx.js";
+import { tick, isCloser } from "../src/cx.js";
 import { createChatwoot } from "../src/chatwoot.js";
 import worker, { run } from "../src/index.js";
 import { buyerKeys, markPaid, verify } from "../src/shopify.js";
@@ -425,4 +425,22 @@ test("a returning customer's claim tap gets the claim reply; other messages from
   await go(f);
   assert.deepEqual(f.sent.map((x) => x.cid), [30]);
   assert.ok(f.sent[0].content.startsWith("Hi, you're in!"));
+});
+
+test("a chat-ad tap pressed again after its reply pings no one; a question after it still does", async () => {
+  const tap = "Hi Reverse Team! I'd like to know more about the Redlight experience at Reverse!";
+  const reply = tpl("red_info", "");
+  const old = { first_reply_created_at: NOW - 25 * 60 };
+  const pinged = [];
+  for (const [cid, last] of [[40, tap], [41, "does it help with skin?"]]) {
+    const f = fake({ open: [conv(cid, INBOX.instagram, "x", old)], threads: { [cid]: [msg(1, 0, tap, 26 * 60), msg(2, 1, reply, 25 * 60), msg(3, 0, last, 20 * 60 + 30)] } });
+    await go(f, { followups: false, alerts: { conversations: [94] } });
+    if (f.sent.some((x) => x.cid === 94)) pinged.push(cid);
+  }
+  assert.deepEqual(pinged, [41]);
+});
+
+test("'I see thanks!' and 'oh okay thank you' end a chat: no 20-minute ping", () => {
+  for (const t of ["I see thanks!", "oh okay thank you", "Ah ok thanks", "okok noted"]) assert.ok(isCloser(t), t);
+  for (const t of ["I see, how much is it", "thanks, can I bring a friend?"]) assert.ok(!isCloser(t), t);
 });

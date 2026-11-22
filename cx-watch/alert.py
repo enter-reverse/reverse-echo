@@ -20,10 +20,9 @@ STORE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "alerts.json")
 try: store = json.load(open(STORE))
 except Exception: store = {}
 for name, cid in TEAM.items():
-    ms = [m for m in a._req(f"/conversations/{cid}/messages")["payload"] if m["message_type"] == 0]
-    last = max((m["created_at"] for m in ms), default=0)
-    if time.time() - last > 23.5 * 3600:
-        print(f"{name}: CLOSED (last message {(time.time() - last) / 3600:.0f}h ago), needs the team_alert template or email")
+    # Chatwoot's can_reply is WhatsApp's 24-hour window; the last 20 messages alone can all be ours (22 Nov 3:55pm)
+    if not a._req(f"/conversations/{cid}").get("can_reply", True):
+        print(f"{name}: CLOSED (24-hour window shut), needs the team_alert template or email")
         continue
     mid, status = a.send_and_check(cid, text)
     print(f"{name}: sent (msg {mid}, {status})")

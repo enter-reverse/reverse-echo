@@ -4,7 +4,7 @@ Reports, then exits so Claude can tell the user:
 - a new customer message (who, what)
 - our reply to a waiting customer, with how long it took
 - a customer still unanswered after 10 minutes (late)"""
-import json, sys, time, urllib.request, datetime
+import json, sys, time, urllib.request, datetime, os
 sys.path.insert(0, "/tmp/claude-0/-home-claude/6b4c8af7-04f8-58a4-aae7-b3cdc76acd22/scratchpad/watch")
 import dashboard  # the CX pane's data (20 Nov)
 import autoreply  # TRIAL and claim auto-replies (the user, 20 Nov 12:03pm)
@@ -45,7 +45,17 @@ while True:
                 for m in get(f"/conversations/{cid}/messages")["payload"]:
                     if m["message_type"] == 0 and not m.get("private") and m["created_at"] > SINCE and m["id"] not in state["seen"]:
                         state["seen"].append(m["id"])
-                        events.append(f"TEAM-MSG {cid} {c['meta']['sender'].get('name')} {t(m['created_at'])} | {(m.get('content') or '[attachment]')[:250].replace(chr(10), ' ')}")
+                        # A reply to a flag carries a suggestion for that case (the user, 22 Nov 16:10): name the
+                        # customer conversation so Claude redrafts it and posts the new draft under the flag.
+                        about = ""
+                        rid = (m.get("content_attributes") or {}).get("in_reply_to")
+                        if rid:
+                            try:
+                                flags = json.load(open(os.path.join(os.path.dirname(STATE), "alerts.json")))
+                                hit = next((k for k, v in flags.items() if any(f["msg"] == rid for f in v)), None)
+                                about = f" [reply to flag on conv {hit}]" if hit else f" [reply to msg {rid}]"
+                            except Exception: pass
+                        events.append(f"TEAM-MSG {cid} {c['meta']['sender'].get('name')} {t(m['created_at'])}{about} | {(m.get('content') or '[attachment]')[:400].replace(chr(10), ' ')}")
                 continue
             if cid in TEAM: continue
             if c["inbox_id"] == 157353: continue  # Joo Chiat WhatsApp: the store handles it (the user, 20 Nov 4:57pm)
@@ -60,9 +70,10 @@ while True:
                     state["seen"].append(m["id"])
                     # TRIAL and website claims: Cloudflare (reverse-echo cx-worker) is the only sender now
                     # (the user, 22 Nov 00:49). Track the claim for follow-ups, say nothing, send nothing.
-                    if autoreply.kind_of(m.get("content"), c["inbox_id"]):
-                        dashboard.add_claim(cid)
-                        continue
+                    k = autoreply.kind_of(m.get("content"), c["inbox_id"])
+                    cf = autoreply.cloudflares(m, ms, c["inbox_id"])
+                    if k and k != "red_info" and cf is True: dashboard.add_claim(cid)  # an enquiry tap isn't a claim
+                    if cf: continue  # Cloudflare's reply (or a repeat tap already answered): nothing for Claude
                     events.append(f"NEW {cid} {name} {t(m['created_at'])} | {(m.get('content') or '[attachment]')[:250].replace(chr(10), ' ')}")
             # a TRIAL or claim Cloudflare still hasn't answered after 5 minutes: flag it
             for i, m in enumerate(ms):
@@ -112,6 +123,8 @@ while True:
                 s, key = r.get("next"), f"{r['id']}:d{r.get('next')}"
                 if not s or key in state.setdefault("fu_alerted", []): continue
                 if time.time() < r["claimedAt"] + 20 * 3600: continue
+                # follow-ups only 9am-9pm SGT; replies to customers go out at any hour (the user, 22 Nov 16:09)
+                if not 9 <= datetime.datetime.now(TZ).hour < 21: continue
                 labels = set(get(f"/conversations/{r['id']}").get("labels") or [])
                 if labels & {"paid", "no-followup"}: continue
                 # Cloudflare sends day 1 to WhatsApp claimers from 22 Nov 2:50pm (the user, 3:04pm); Claude keeps

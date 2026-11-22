@@ -85,7 +85,10 @@ export async function tick({ api, options = {}, log = console.log }) {
         const last = ms.filter((m) => m.message_type === 0).at(-1);
         if (!last || !fresh(last) || !isAdTap(last.content, c.inbox_id)) continue;
         if (ms.some((m) => m.message_type === 1 && m.created_at >= last.created_at)) continue;
-        if (ms.some((m) => m.message_type === 1 && m.content === tpl(kindOf(last.content, c.inbox_id), ""))) continue;
+        // Compare by the reply's opening line, so a reply sent before a wording change still counts (22 Nov:
+        // the Red Light reply was reworded at 6:11pm; an exact match would answer an earlier tapper again).
+        const opener = tpl(kindOf(last.content, c.inbox_id), "").split("\n")[0].slice(0, 60);
+        if (ms.some((m) => m.message_type === 1 && String(m.content ?? "").startsWith(opener))) continue;
         hit = last;
       } else {
         if (ms.some((m) => m.message_type === 1)) continue; // never reply twice

@@ -395,14 +395,14 @@ test("someone who has chatted with us before still gets the reply when they tap 
       conv(21, INBOX.instagram, "b", old), // we already answered after the tap
       conv(22, INBOX.instagram, "c", old), // typed their own question after tapping
       conv(23, INBOX.waCx, "d", old), // WhatsApp: no change, a person answers
-      conv(24, INBOX.instagram, "e", old), // already had this exact reply before
+      conv(24, INBOX.instagram, "e", old), // already had this reply before, in its earlier wording
     ],
     threads: {
       20: [msg(1, 0, "hi do you have parking", 30 * 86400), msg(2, 1, "Yes!", 30 * 86400 - 60), msg(3, 0, tap, 40)],
       21: [msg(1, 0, tap, 300), msg(2, 1, "Hey there!", 200)],
       22: [msg(1, 0, tap, 300), msg(2, 0, "is it safe for pregnancy?", 60)],
       23: [msg(1, 0, "Hi Reverse Team! I'd like to claim my $100 off Redlight.", 40)],
-      24: [msg(1, 0, tap, 5 * 86400), msg(2, 1, tpl("red_info", ""), 5 * 86400 - 60), msg(3, 0, tap, 40)],
+      24: [msg(1, 0, tap, 5 * 86400), msg(2, 1, tpl("red_info", "").replace("for their skin", "for their skin (fine lines, firmness)") + "\n\n- Zoey", 5 * 86400 - 60), msg(3, 0, tap, 40)],
     },
   });
   await go(f);

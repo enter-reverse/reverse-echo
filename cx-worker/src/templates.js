@@ -13,11 +13,32 @@ const TAIL =
   "Any questions, just ask me here :)\n\n- Zoey";
 
 /** "jenny tan" -> "Jenny"; anything that isn't a plain 2+ letter name -> "" (then the reply opens without a name). */
+// Romanised Chinese syllables (Hokkien, Cantonese, Teochew, Hakka, Pinyin) common in Singapore given names and surnames.
+// Many Chinese given names are two such words ("Joo Leong", "Jia Xuan", "Wan Qing"): the user, 22 Nov 2026,
+// "some chinese names is like 2 words", so both are used. "Rohan Raj" still gives "Rohan".
+const CN = new Set(("ah ai an ang joo yeoh yik yew yeo koh goh teo tay toh seah lau khoo sim low lee wong au bao bee beng bin bing boon bun cai chai chan chang chao chee chek chen cheng cheong cheow chew chi chia chiam " +
+  "chian chiang chien chih chin ching chio chiong chiu choe choi chong choo chooi chou chu chua chuan chun chung " +
+  "da dai de dong en eng fa fang fei feng fong foo fu gan gao geok guan gui guo hai han hao he heng hian hin ho hock " +
+  "hoe hong hoon hor hou hsin hu hua huan huang hui hun hwa hwee jia jian jiang jie jin jing jun kai kang kar keat kee " +
+  "keng kew khai khee khim kian kiat kim kin king kit kok kong kuan kuang kum kun kwan kwang kwee lai lam lan lay le leng " +
+  "leong li lian liang lie lien lih lim lin ling liu loh long loo lu luo ma mei meng mew miao min ming mui mun na nam nan " +
+  "neo ng ning oh ong pang pei peng phua pin ping poh puay qi qian qiang qin qing qiu rong ru rui san seng shan shao sheng " +
+  "shi shu shuang si siang sin sing siong siew siok soh song soo su sui sun swee tai tan tang teck tee teng tian tiong " +
+  "toh tong tse wah wai wan wang wee wei wen weng wing wu xi xian xiang xiao xin xing xiu xu xuan ya yan yang yao ye yee " +
+  "yi yin ying yong you yu yuan yue yun zhang zhao zhe zhen zheng zhi zhong zhou zhu zi").split(" "));
+const SURNAMES = new Set("tan lim lee ng ong wong goh chua chan koh teo ang yeo yeoh tay ho low toh sim chong chia seah lau khoo heng neo".split(" "));
+const cap = (w) => (w === w.toLowerCase() && /[a-z]/.test(w) ? w[0].toUpperCase() + w.slice(1) : w);
+
 export function firstName(name) {
-  const w = String(name ?? "").trim().split(/\s+/)[0] ?? "";
+  const words = String(name ?? "").trim().split(/\s+/).filter(Boolean);
+  const w = words[0] ?? "";
   if (!/^[A-Za-z][A-Za-z'\-]{1,20}$/.test(w)) return "";
-  const isLower = w === w.toLowerCase() && /[a-z]/.test(w);
-  return isLower ? w[0].toUpperCase() + w.slice(1) : w;
+  const cn = (x) => CN.has(String(x).toLowerCase());
+  // "Joo Leong" / "jia xuan": a two-word Chinese given name.
+  if (words.length === 2 && words.every(cn)) return words.map(cap).join(" ");
+  // "Tan Joo Leong": surname first, then a two-word given name.
+  if (words.length === 3 && words.every(cn) && SURNAMES.has(words[0].toLowerCase())) return words.slice(1).map(cap).join(" ");
+  return cap(w);
 }
 
 export function tpl(kind, name) {

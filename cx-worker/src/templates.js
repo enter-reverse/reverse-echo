@@ -73,10 +73,11 @@ export function tpl(kind, name) {
         "- Use your credits on any therapy at Reverse too: HBOT, Red Light and Contrast\n" + TAIL
       );
     case "contrast":
+      // Same shape as every other therapy (the user, 22 Nov: standardise); the drop-in comes up only when they ask for one.
       return (
-        `${hey} Your $100 off is locked in. It takes $100 off your first month of the monthly pass, so it's $199 instead of $299.\n\n` +
-        "You can also start smaller with a drop-in: one Contrast night for $125, 75 minutes for up to 4 people.\n\n" +
-        "If you like it, top up $74 at the counter before you leave and we turn it into your first month: 3 more Contrast nights (or mix: say 2 Contrast and 2 Red Light), and your $125 already counts. No need to buy a new pass on top.\n\n- Zoey"
+        inAt199 +
+        "- 8 credits a month, enough for 4 Contrast sessions (75 minutes each, up to 4 people)\n" +
+        "- Use your credits on any therapy at Reverse too: HBOT, Red Light and Dry Float\n" + TAIL
       );
     case "duo":
       return (

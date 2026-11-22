@@ -226,8 +226,7 @@ export async function tick({ api, options = {}, log = console.log }) {
         if (!waiting) continue;
         const kind = !ms.some((m) => m.message_type === 1) && kindOf(waiting.content, c.inbox_id);
         const what = kind && crossed(waiting, 5) ? `No auto-reply after 5 min (${kind})`
-          : crossed(waiting, 20) ? "Unanswered 20 min"
-          : crossed(waiting, 10) ? "Unanswered 10 min" : null;
+          : crossed(waiting, 20) ? "Unanswered 20 min" : null; // no 10-minute ping (the user, 22 Nov: the CX chat answers within minutes)
         if (!what) continue;
         log(`ALERT ${what} in conversation ${cid}`);
         if (dryRun) continue;

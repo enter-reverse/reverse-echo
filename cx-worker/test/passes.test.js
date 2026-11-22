@@ -104,3 +104,10 @@ test("a buyer with no chat says so plainly instead of guessing", async () => {
   assert.match(lines[2], /Chat: none matched/);
   assert.equal(lines[3], "First contact to paid: not traceable (the order is the first trace)");
 });
+
+test("a monthly renewal is not a new pass", () => {
+  assert.deepEqual(passDelta(order({ tags: "Subscription, Subscription First Order" })), { kind: "All-Access", n: 1 });
+  assert.deepEqual(passDelta(order({ tags: "Subscription, Subscription Recurring Order", total_price: "299.00" })), { kind: "renewal", n: 0 });
+  assert.deepEqual(passDelta(order({ tags: "Subscription", total_price: "299.00", line_items: [line("All-Access Pass", 2)] })), { kind: "renewal", n: 0 });
+  assert.deepEqual(passDelta(order({ tags: "" })), { kind: "All-Access", n: 1 });
+});

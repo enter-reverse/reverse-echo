@@ -33,6 +33,12 @@ PASS_BASE_TOTAL = "61"
 ALERTS = "on"
 ALERT_CONVERSATION = "410"
 
+# Reminders from Zoey's number (src/reminders.js), 10:00am Singapore time. Who gets them: Elijah (410) and Andre (94).
+REMINDER_CONVERSATIONS = "410,94"
+# The day Echo's Instagram token runs out (generated 21 Nov 2026, about 60 days). Reminders start 10 days before.
+# After renewing the token, set this to the new date.
+IG_TOKEN_EXPIRES = "2027-01-20"
+
 # Secrets (set by the deploy workflow, never committed): CW_TOKEN, CW_ACC, SHOPIFY_WEBHOOK_SECRET
 
 # Keep each run's log lines in the Cloudflare dashboard (Workers > this Worker > Logs).

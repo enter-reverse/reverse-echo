@@ -3,6 +3,7 @@
 import { createChatwoot } from "./chatwoot.js";
 import { tick } from "./cx.js";
 import { markPaid, verify } from "./shopify.js";
+import { sendReminders } from "./reminders.js";
 import { countPass } from "./passes.js";
 
 export async function run(env, { fetchImpl = fetch, log = console.log, now = Math.floor(Date.now() / 1000) } = {}) {
@@ -37,6 +38,10 @@ export default {
           // One line per pass, so the log shows the watcher is alive and reaching Chatwoot.
           console.log(JSON.stringify({ dryRun: !(env.DRY_RUN === "0" || env.DRY_RUN === "false"), ...counts }));
           for (const e of errors) console.warn(`warning: ${e}`);
+          // Dated reminders to the team (10:00am Singapore time only).
+          if (env.REMINDER_CONVERSATIONS) {
+            await sendReminders({ api: createChatwoot({ token: env.CW_TOKEN, account: env.CW_ACC }), env, now, dryRun: !(env.DRY_RUN === "0" || env.DRY_RUN === "false") });
+          }
         } catch (err) {
           console.error(`run failed: ${err.message}`);
         }

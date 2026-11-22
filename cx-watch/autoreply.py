@@ -49,8 +49,8 @@ def tpl(kind, name):
                 "- Use your credits on any therapy at Reverse too: HBOT, Red Light and Contrast\n" + TAIL)
     if kind == "contrast":
         return (f"{hey} Your $100 off is locked in. It takes $100 off your first month of the monthly pass, so it's $199 instead of $299.\n\n"
-                "You can also start smaller with a drop-in: one Contrast night at our member rate, $75 for 75 minutes.\n\n"
-                "If you like it, it's $124 more and we top it up into your first month: 3 more Contrast nights (or mix: say 2 Contrast and 2 Red Light), and your $75 already counts. No need to buy a new pass on top.\n\n- Zoey")
+                "You can also start smaller with a drop-in: one Contrast night for $125, 75 minutes for up to 4 people.\n\n"
+                "If you like it, top up $74 within 7 days and we turn it into your first month: 3 more Contrast nights (or mix: say 2 Contrast and 2 Red Light), and your $125 already counts. No need to buy a new pass on top.\n\n- Zoey")
     if kind == "duo":
         return (f"{hi}, you're both in! Here's your $299 first month for two, with your $299 off already applied:\n\n"
                 "https://pass.enterreverse.com/gift-duo\n\nWhat you get:\n"

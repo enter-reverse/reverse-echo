@@ -76,7 +76,7 @@ export function tpl(kind, name) {
       return (
         `${hey} Your $100 off is locked in. It takes $100 off your first month of the monthly pass, so it's $199 instead of $299.\n\n` +
         "You can also start smaller with a drop-in: one Contrast night for $125, 75 minutes for up to 4 people.\n\n" +
-        "If you like it, top up $74 within 7 days and we turn it into your first month: 3 more Contrast nights (or mix: say 2 Contrast and 2 Red Light), and your $125 already counts. No need to buy a new pass on top.\n\n- Zoey"
+        "If you like it, top up $74 at the counter before you leave and we turn it into your first month: 3 more Contrast nights (or mix: say 2 Contrast and 2 Red Light), and your $125 already counts. No need to buy a new pass on top.\n\n- Zoey"
       );
     case "duo":
       return (

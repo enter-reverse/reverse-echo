@@ -94,9 +94,11 @@ export function tpl(kind, name) {
       // The "find out more" tap on the Red Light chat ad (the user, 22 Nov 2026): no name, a warm opener and one
       // question, so the CX manager can take it from their answer.
       return (
+        // Introduces Zoey once, so no "- Zoey" sign-off; benefits stay general, no named results or figures
+        // (the user, 22 Nov 6:08pm: "how come u introduce yourself 2 times ... just say general benefits").
         "Hey! I'm Zoey from Reverse. Our Redlight bed is full-body: you lie back for 20 minutes in your own private room. " +
-        "Most people come for their skin (fine lines, firmness) or for recovery.\n\n" +
-        "What are you hoping it helps with? I'll tell you how people use it and what it costs to try.\n\n- Zoey"
+        "Most people come for their skin or for recovery.\n\n" +
+        "What are you hoping it helps with? I'll tell you how people use it and what it costs to try."
       );
     default:
       return null;

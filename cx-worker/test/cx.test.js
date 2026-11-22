@@ -365,7 +365,8 @@ test("the Red Light ad's 'find out more' tap gets the nameless enquiry reply and
   assert.deepEqual(f.sent.map((x) => x.cid), [9]);
   assert.ok(f.sent[0].content.startsWith("Hey! I'm Zoey from Reverse. Our Redlight bed is full-body"));
   assert.ok(!f.sent[0].content.includes("Mei"));
-  assert.ok(f.sent[0].content.endsWith("- Zoey"));
+  assert.ok(!f.sent[0].content.includes("- Zoey"), "introduces Zoey once, no sign-off");
+  assert.ok(!/\d+%|fine lines/.test(f.sent[0].content), "general benefits only");
 });
 
 test("the 'Hi Reverse Team!' taps: find out more gets the enquiry reply, claim gets the Red Light claim reply", async () => {

@@ -74,6 +74,7 @@ while True:
                     cf = autoreply.cloudflares(m, ms, c["inbox_id"])
                     if k and k != "red_info" and cf is True: dashboard.add_claim(cid)  # an enquiry tap isn't a claim
                     if cf: continue  # Cloudflare's reply (or a repeat tap already answered): nothing for Claude
+                    if autoreply.is_thanks(m.get("content")): continue  # Cloudflare's "You're welcome!" (once per chat)
                     events.append(f"NEW {cid} {name} {t(m['created_at'])} | {(m.get('content') or '[attachment]')[:250].replace(chr(10), ' ')}")
             # a TRIAL or claim Cloudflare still hasn't answered after 5 minutes: flag it
             for i, m in enumerate(ms):

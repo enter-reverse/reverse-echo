@@ -444,3 +444,26 @@ test("'I see thanks!' and 'oh okay thank you' end a chat: no 20-minute ping", ()
   for (const t of ["I see thanks!", "oh okay thank you", "Ah ok thanks", "okok noted"]) assert.ok(isCloser(t), t);
   for (const t of ["I see, how much is it", "thanks, can I bring a friend?"]) assert.ok(!isCloser(t), t);
 });
+
+test("a thank-you gets 'You're welcome!' once in the whole chat, a minute later, and never in team, store or email chats", async () => {
+  const W = "You're welcome! Always happy to help :)";
+  const said = (cid, inbox, thread, extra = {}) => [conv(cid, inbox, "x", extra), thread];
+  const cases = [
+    said(50, INBOX.waCx, [msg(1, 0, "how much?", 600), msg(2, 1, "$199 first month", 500), msg(3, 0, "I see thanks!", 90)]),  // yes
+    said(51, INBOX.instagram, [msg(1, 0, "hi", 600), msg(2, 1, "Hey!", 500), msg(3, 0, "thank you so much", 90)]),            // yes
+    said(52, INBOX.waCx, [msg(1, 0, "q", 900), msg(2, 1, "a", 800), msg(3, 0, "thanks", 700), msg(4, 1, W, 640), msg(5, 0, "q2", 400), msg(6, 1, "a2", 300), msg(7, 0, "thanks again", 90)]), // already said once
+    said(53, INBOX.waCx, [msg(1, 0, "q", 600), msg(2, 1, "a", 500), msg(3, 0, "thanks", 20)]),                                  // under a minute: wait
+    said(54, INBOX.waCx, [msg(1, 0, "q", 600), msg(2, 1, "a", 500), msg(3, 0, "ok noted", 90)]),                                // no thanks word
+    said(55, INBOX.waCx, [msg(1, 0, "q", 600), msg(2, 1, "a", 500), msg(3, 0, "thanks, can I bring a friend?", 90)]),         // a question: a person answers
+    said(56, INBOX.email, [msg(1, 0, "q", 600), msg(2, 1, "a", 500), msg(3, 0, "thanks", 90)]),                                 // email: no
+    said(57, INBOX.waCx, [msg(1, 0, "q", 600), msg(2, 1, "a", 500), msg(3, 0, "thanks", 90)], { labels: ["internal"] }),        // internal: no
+    said(58, INBOX.waCx, [msg(1, 0, "thanks", 90)]),                                                                             // we never wrote: no
+  ];
+  const f = fake({ open: cases.map(([c]) => ({ ...c, last_activity_at: NOW - 90 })), threads: Object.fromEntries(cases.map(([c, t]) => [c.id, t])) });
+  await go(f, { followups: false, maxSends: 20 });
+  assert.deepEqual(f.sent.filter((x) => x.content === W).map((x) => x.cid), [50, 51]);
+  await go(f, { followups: false, maxSends: 20, now: NOW + 60 }); // a minute on: 53's thanks is now due
+  assert.deepEqual(f.sent.filter((x) => x.content === W).map((x) => x.cid), [50, 51, 53]);
+  await go(f, { followups: false, maxSends: 20, now: NOW + 120 });
+  assert.equal(f.sent.filter((x) => x.content === W).length, 3, "never twice");
+});

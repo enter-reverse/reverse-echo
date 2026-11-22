@@ -35,6 +35,11 @@ export function isCloser(text) {
   return /^((ok(ay)?|okok|kk?|noted|sure|great|cool|nice|alright|got it|perfect|awesome|will do|sounds good|see you|see ya|bye|i see|ah|oh|ahh|ohh|alrighty)\s*)*((thanks?|thank you|thx|tq|ty|many thanks|thanks so much|thank you so much|appreciate it|much appreciated|cheers)(\s+(so much|a lot|zoey|again|ya|yah|yes))*)?$/.test(t)
     && t.length <= 40;
 }
+/** A sign-off that thanks us ("thanks!", "I see thanks!", "thank you so much"), not just "ok" or an emoji. */
+export function isThanks(text) {
+  return isCloser(text) && /\b(thanks?|thank you|thx|tq|ty|appreciate|cheers)\b/i.test(String(text ?? ""));
+}
+export const WELCOME = "You're welcome! Always happy to help :)";
 const CHANNEL = { [INBOX.instagram]: "Instagram", [INBOX.waCx]: "WhatsApp", [INBOX.messenger]: "Messenger", [INBOX.email]: "email", [INBOX.web]: "web chat" };
 
 /**
@@ -113,6 +118,35 @@ export async function tick({ api, options = {}, log = console.log }) {
       );
     } catch (err) {
       summary.errors.push(`conversation ${cid}: ${err.message}`);
+    }
+  }
+
+  // ---- 1b. thank-you -----------------------------------------------------------------
+  // A customer who thanks us gets "You're welcome! Always happy to help :)" once in the whole chat, a minute
+  // after, if they haven't written more (the user, 22 Nov 6:29pm: "just say it once in the whole chat").
+  // WhatsApp, Instagram and Messenger only; never team chats, the store's WhatsApp, email, or an internal chat.
+  for (const [cid, c] of convs) {
+    if (TEAM.has(cid) || c.inbox_id === INBOX.waJooChiat || c.inbox_id === INBOX.email || c.inbox_id === INBOX.web) continue;
+    if ((c.labels ?? []).includes("internal")) continue;
+    if ((c.last_activity_at ?? 0) <= now - 10 * 60) continue;
+    if (sends >= maxSends || !room()) { summary.skipped++; continue; }
+    try {
+      let ms = read.get(cid);
+      if (!ms) { ms = await api.messages(cid); read.set(cid, ms); }
+      const pub = ms.filter((m) => m.message_type === 0 || m.message_type === 1);
+      const last = pub.at(-1);
+      if (!last || last.message_type !== 0 || !isThanks(last.content)) continue;
+      if (last.created_at > now - 60 || last.created_at <= now - 10 * 60) continue; // give them a minute to add more
+      if (!pub.some((m) => m.message_type === 1 && m.created_at < last.created_at)) continue; // thanks for what we said
+      if (pub.some((m) => m.message_type === 1 && String(m.content ?? "").startsWith(WELCOME))) continue; // once per chat
+      sends++;
+      if (dryRun) { log(`${tag}would send the thank-you reply in conversation ${cid}`); continue; }
+      if ((await api.messages(cid)).filter((m) => m.message_type === 0 || m.message_type === 1).at(-1)?.id !== last.id) continue;
+      await api.send(cid, WELCOME);
+      summary.autoSent++;
+      log(`AUTO-SENT thank-you reply in conversation ${cid}`);
+    } catch (err) {
+      summary.errors.push(`thank-you ${cid}: ${err.message}`);
     }
   }
 

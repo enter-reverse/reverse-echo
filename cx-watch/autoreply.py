@@ -75,9 +75,22 @@ def _req(path, data=None):
     r = urllib.request.Request(BASE + path, data=json.dumps(data).encode() if data is not None else None, headers=h)
     return json.load(urllib.request.urlopen(r, timeout=30))
 
+class Blocked(Exception):
+    pass
+
 def send_and_check(cid, content):
-    """Post, wait, re-read the message's status. Returns (msg_id, status)."""
-    r = _req(f"/conversations/{cid}/messages", {"content": content, "message_type": "outgoing", "private": False})
+    """Post, wait, re-read the message's status. Returns (msg_id, status).
+    Every customer send passes guard.check first (the user, 22 Nov 13:38): a blocked message raises Blocked and is not sent."""
+    import guard
+    why = guard.check(cid, content, _req)
+    if why:
+        raise Blocked("; ".join(why))
+    try:
+        r = _req(f"/conversations/{cid}/messages", {"content": content, "message_type": "outgoing", "private": False})
+    except urllib.error.HTTPError as e:
+        if e.code != 422: raise
+        time.sleep(3)  # Chatwoot sometimes refuses a send once (22 Nov); one retry
+        r = _req(f"/conversations/{cid}/messages", {"content": content, "message_type": "outgoing", "private": False})
     mid = r.get("id")
     status = r.get("status")
     for _ in range(4):

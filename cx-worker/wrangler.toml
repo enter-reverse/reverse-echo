@@ -23,18 +23,19 @@ FOLLOWUP_DAY5 = "off"
 # The language code the templates were approved under ("en", or "en_US" / "en_GB" if that was picked).
 TEMPLATE_LANGUAGE = "en"
 # The pass counter (src/passes.js): each paid pass order on Shopify WhatsApps the user (Elijah) the new total and
-# the buyer's journey. PASS_ALERT_CONV is his chat with Zoey's number in Chatwoot; "" switches it off.
+# the buyer's journey. PASS_ALERT_CONV = the team's chats with Zoey's number (Elijah 410, Andre 94, Gordon 433), comma-separated;
+# the first holds the running total; "" switches it off.
 # PASS_BASE_TOTAL is used only until a "Total: N" message exists in that chat (61, confirmed 22 Nov 2026).
-PASS_ALERT_CONV = "410"
+PASS_ALERT_CONV = "410,94,433"
 PASS_BASE_TOTAL = "61"
 
 # "on" = WhatsApp the owner when a customer is still unanswered at 10 and 20 minutes, or a TRIAL or claim
 # message got no auto-reply within 5 minutes. They go to the owner's own chat with the CX line:
 ALERTS = "on"
-ALERT_CONVERSATION = "410"
+ALERT_CONVERSATION = "410,94,433"
 
-# Reminders from Zoey's number (src/reminders.js), 10:00am Singapore time. Who gets them: Elijah (410) and Andre (94).
-REMINDER_CONVERSATIONS = "410,94"
+# Reminders from Zoey's number (src/reminders.js), 10:00am Singapore time. Who gets them: Elijah (410), Andre (94) and Gordon (433).
+REMINDER_CONVERSATIONS = "410,94,433"
 # The day Echo's Instagram token runs out (generated 21 Nov 2026, about 60 days). Reminders start 10 days before.
 # After renewing the token, set this to the new date.
 IG_TOKEN_EXPIRES = "2027-01-20"

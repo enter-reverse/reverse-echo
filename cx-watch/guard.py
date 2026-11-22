@@ -60,6 +60,7 @@ def check(cid, text, req):
     if int(cid) in TEAM_CHATS:
         return []
     reasons = []
+    conv = {}
     try:
         conv = req(f"/conversations/{cid}")
         me = conv.get("meta", {}).get("sender", {}) or {}
@@ -84,6 +85,20 @@ def check(cid, text, req):
         digits = re.sub(r"\D", "", p)
         if len(digits) >= 8 and _norm_phone(p) != my_phone:
             reasons.append(f"phone-like number: {p.strip()}")
+
+    # "- Zoey" goes on the first message of a WhatsApp or Messenger chat only. Never on Instagram, where Echo's
+    # TRIAL DM (sent straight through Instagram, so invisible here) has usually signed already; never once we've
+    # written in the chat (the user, 22 Nov 8:16pm: "make sure the dash Zoey doesn't [double] ... how many times").
+    if re.search(r"(^|\n)\s*-\s*Zoey\s*$", text.strip(), flags=re.I):
+        inbox = (conv or {}).get("inbox_id")
+        try:
+            ours = [m for m in req(f"/conversations/{cid}/messages")["payload"] if m.get("message_type") == 1 and not m.get("private")]
+        except Exception:
+            ours = [1]
+        if inbox == 156618:
+            reasons.append('"- Zoey" sign-off on Instagram (Echo has usually signed already): remove it')
+        elif ours:
+            reasons.append('"- Zoey" sign-off, but we have already written in this chat: remove it')
 
     if re.search(r"#\d{3,}", body):
         reasons.append("order number")

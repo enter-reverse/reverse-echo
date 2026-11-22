@@ -53,7 +53,7 @@ test("a fresh website claim and a TRIAL message each get their reply once, and a
   const s = await go(f);
   assert.deepEqual(f.sent.map((x) => x.cid), [1, 2]);
   assert.equal(f.sent[0].content, tpl("hbot", "Glory"));
-  assert.equal(f.sent[1].content, tpl("trial", ""));
+  assert.equal(f.sent[1].content, tpl("trial", "").replace(/\n+\s*-\s*Zoey\s*$/, "")); // Instagram: no sign-off
   assert.deepEqual(f.labels, { 1: ["claim"], 2: ["trial"] });
   assert.equal(s.autoSent, 2);
   await go(f); // the next minute
@@ -466,4 +466,12 @@ test("a thank-you gets 'You're welcome!' once in the whole chat, a minute later,
   assert.deepEqual(f.sent.filter((x) => x.content === W).map((x) => x.cid), [50, 51, 53]);
   await go(f, { followups: false, maxSends: 20, now: NOW + 120 });
   assert.equal(f.sent.filter((x) => x.content === W).length, 3, "never twice");
+});
+
+test("Instagram auto-replies never sign '- Zoey' (Echo's DM already did); WhatsApp's first reply still does", async () => {
+  const f = fake({ open: [conv(60, INBOX.instagram, "x"), conv(61, INBOX.waCx, "Tim")], threads: { 60: [msg(1, 0, "TRIAL", 30)], 61: [msg(1, 0, CLAIM, 30)] } });
+  await go(f, { followups: false });
+  const by = Object.fromEntries(f.sent.map((x) => [x.cid, x.content]));
+  assert.ok(!/-\s*Zoey\s*$/.test(by[60]), "Instagram: no sign-off");
+  assert.ok(/- Zoey$/.test(by[61]), "WhatsApp first reply: signed");
 });

@@ -120,6 +120,13 @@ export function kindOf(text, inbox) {
   return m ? THERAPY[m[1]] : null;
 }
 
+/** One of the Instagram chat ad's taps ("Hi Reverse Team! I'd like to ..."). These are the only messages the
+ * robot also answers in a chat we've written in before, so people who messaged Reverse in the past still get
+ * the instant reply when they tap the ad (the user, 22 Nov 2026). */
+export function isAdTap(text, inbox) {
+  return inbox === INBOX.instagram && /^Hi Reverse Team!?\s/i.test(String(text ?? "").trim()) && kindOf(text, inbox) !== null;
+}
+
 /** The approved day-1 follow-up (the user, 21 Nov 2026). No sign-off: they've had our first message. */
 export function followup1(name) {
   const body = "$100 off is still saved for you. Any questions about how it works, just ask me here :)";

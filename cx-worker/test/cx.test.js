@@ -384,3 +384,44 @@ test("Instagram replies never use a name: the claim reply opens with plain 'Hi'"
   assert.ok(f.sent[0].content.startsWith("Hi, you're in!"));
   assert.ok(!f.sent[0].content.includes("Mei"));
 });
+
+test("someone who has chatted with us before still gets the reply when they tap the Instagram chat ad, once", async () => {
+  const tap = "Hi Reverse Team! I'd like to know more about the Redlight experience at Reverse!";
+  const old = { first_reply_created_at: NOW - 30 * 86400 };
+  const f = fake({
+    open: [
+      conv(20, INBOX.instagram, "a", old), // tapped today, last spoke a month ago
+      conv(21, INBOX.instagram, "b", old), // we already answered after the tap
+      conv(22, INBOX.instagram, "c", old), // typed their own question after tapping
+      conv(23, INBOX.waCx, "d", old), // WhatsApp: no change, a person answers
+      conv(24, INBOX.instagram, "e", old), // already had this exact reply before
+    ],
+    threads: {
+      20: [msg(1, 0, "hi do you have parking", 30 * 86400), msg(2, 1, "Yes!", 30 * 86400 - 60), msg(3, 0, tap, 40)],
+      21: [msg(1, 0, tap, 300), msg(2, 1, "Hey there!", 200)],
+      22: [msg(1, 0, tap, 300), msg(2, 0, "is it safe for pregnancy?", 60)],
+      23: [msg(1, 0, "Hi Reverse Team! I'd like to claim my $100 off Redlight.", 40)],
+      24: [msg(1, 0, tap, 5 * 86400), msg(2, 1, tpl("red_info", ""), 5 * 86400 - 60), msg(3, 0, tap, 40)],
+    },
+  });
+  await go(f);
+  assert.deepEqual(f.sent.map((x) => x.cid), [20]);
+  assert.equal(f.sent[0].content, tpl("red_info", ""));
+  assert.deepEqual(f.labels, { 20: ["enquiry"] });
+  await go(f);
+  assert.equal(f.sent.length, 1, "never twice");
+});
+
+test("a returning customer's claim tap gets the claim reply; other messages from them still wait for a person", async () => {
+  const old = { first_reply_created_at: NOW - 86400 };
+  const f = fake({
+    open: [conv(30, INBOX.instagram, "a", old), conv(31, INBOX.instagram, "b", old)],
+    threads: {
+      30: [msg(1, 0, "hello", 86400), msg(2, 1, "Hi!", 86000), msg(3, 0, "Hi Reverse Team! I'd like to claim my $100 off Redlight.", 30)],
+      31: [msg(1, 0, "hello", 86400), msg(2, 1, "Hi!", 86000), msg(3, 0, "TRIAL", 30)],
+    },
+  });
+  await go(f);
+  assert.deepEqual(f.sent.map((x) => x.cid), [30]);
+  assert.ok(f.sent[0].content.startsWith("Hi, you're in!"));
+});

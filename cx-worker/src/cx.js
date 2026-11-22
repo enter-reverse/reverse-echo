@@ -17,7 +17,7 @@
 // ("claim", "trial", "duo") and what has been done ("fu1", "fu3", "fu5"), and people can steer it with
 // "paid" and "no-followup".
 
-import { INBOX, FOLLOWUP1_MARKER, TEMPLATES, firstName, followup1, kindOf, tpl } from "./templates.js";
+import { INBOX, FOLLOWUP1_MARKER, TEMPLATES, firstName, followup1, isAdTap, kindOf, tpl } from "./templates.js";
 
 const HOUR = 3600;
 const DAY = 24 * HOUR;
@@ -67,7 +67,9 @@ export async function tick({ api, options = {}, log = console.log }) {
   for (const [cid, c] of convs) {
     if (TEAM.has(cid) || c.inbox_id === INBOX.waJooChiat) continue; // the store answers its own WhatsApp
     if ((c.last_activity_at ?? 0) <= now - freshSecs) continue;
-    if (c.first_reply_created_at) continue; // we've written here before
+    // We've written here before: only an Instagram chat ad's tap is still answered (checked below).
+    const returning = Boolean(c.first_reply_created_at);
+    if (returning && c.inbox_id !== INBOX.instagram) continue;
     if (c.inbox_id === INBOX.email && EMAIL_NOISE.some((n) => (sender(c).email ?? "").toLowerCase().includes(n))) continue;
     if (threads >= maxThreads) { summary.skipped++; continue; }
     threads++;
@@ -75,17 +77,29 @@ export async function tick({ api, options = {}, log = console.log }) {
       const ms = await api.messages(cid);
       read.set(cid, ms);
       summary.checked++;
-      if (ms.some((m) => m.message_type === 1)) continue; // never reply twice
-      // This Worker is the only sender of these replies (the CX chat stopped sending them on 22 Nov 2026),
-      // so a matching message is answered on the next pass. `minAgeSecs` can add a wait if that ever changes.
-      const hit = ms.find((m) => m.message_type === 0 && m.created_at > now - freshSecs && m.created_at <= now - minAgeSecs && kindOf(m.content, c.inbox_id));
+      const fresh = (m) => m.created_at > now - freshSecs && m.created_at <= now - minAgeSecs;
+      let hit;
+      if (returning) {
+        // Someone who has chatted with us before tapped the chat ad. Answer only if the tap is their latest
+        // message, nothing from us came after it, and this chat has never had this reply.
+        const last = ms.filter((m) => m.message_type === 0).at(-1);
+        if (!last || !fresh(last) || !isAdTap(last.content, c.inbox_id)) continue;
+        if (ms.some((m) => m.message_type === 1 && m.created_at >= last.created_at)) continue;
+        if (ms.some((m) => m.message_type === 1 && m.content === tpl(kindOf(last.content, c.inbox_id), ""))) continue;
+        hit = last;
+      } else {
+        if (ms.some((m) => m.message_type === 1)) continue; // never reply twice
+        // This Worker is the only sender of these replies (the CX chat stopped sending them on 22 Nov 2026),
+        // so a matching message is answered on the next pass. `minAgeSecs` can add a wait if that ever changes.
+        hit = ms.find((m) => m.message_type === 0 && fresh(m) && kindOf(m.content, c.inbox_id));
+      }
       if (!hit) continue;
       const kind = kindOf(hit.content, c.inbox_id);
       if (sends >= maxSends) { summary.skipped++; continue; }
       sends++;
       if (dryRun) { log(`${tag}would send the ${kind} reply in conversation ${cid}`); continue; }
       // Look once more immediately before sending, in case a reply landed while this pass was running.
-      if ((await api.messages(cid)).some((m) => m.message_type === 1)) continue;
+      if ((await api.messages(cid)).some((m) => m.message_type === 1 && (!returning || m.created_at >= hit.created_at))) continue;
       // No name on Instagram: display names there are handles, emojis or nicknames (the user, 22 Nov 2026).
       await api.send(cid, tpl(kind, c.inbox_id === INBOX.instagram ? "" : firstName(sender(c).name)));
       read.delete(cid); // answered: nothing to alert about

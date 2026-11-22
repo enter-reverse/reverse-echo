@@ -370,6 +370,7 @@ test("the Red Light ad's 'find out more' tap gets the nameless enquiry reply and
 
 test("the 'Hi Reverse Team!' taps: find out more gets the enquiry reply, claim gets the Red Light claim reply", async () => {
   assert.equal(kindOf("Hi Reverse Team! I'd like to find out more about the red light experience!", INBOX.instagram), "red_info");
+  assert.equal(kindOf("Hi Reverse Team! I'd like to know more about the redlight experience at Reverse!", INBOX.instagram), "red_info");
   assert.equal(kindOf("Hi Reverse Team! I'd like to claim my $100 off Red Light.", INBOX.instagram), "red");
   assert.equal(kindOf("Hi Reverse Team! I'd like to claim my $100 off Red Light.", INBOX.email), null);
   assert.equal(kindOf("Hi Reverse Team! I'd like to claim my $100 off Red Light. When can I come?", INBOX.instagram), null);

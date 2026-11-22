@@ -112,7 +112,7 @@ export function kindOf(text, inbox) {
   if (!CLAIM_INBOXES.has(inbox)) return null;
   // The Red Light chat ad's two taps (22 Nov 2026). The person's tap says "Hi Reverse Team!" and our reply
   // introduces Zoey (the user: "just put Hi Reverse Team! then thats where we'll introduce ourself").
-  if (/^(Hi Reverse Team!? )?I['’]d like to find out more about the red light experience( at Reverse)?!?$/i.test(t)) return "red_info";
+  if (/^(Hi Reverse Team!? )?I['’]d like to (find out|know) more about the red ?light experience( at Reverse)?!?$/i.test(t)) return "red_info";
   const tapClaim = t.match(/^Hi Reverse Team!? I['’]d like to claim my \$\d+ off (HBOT|Red Light|Contrast|Dry Float)\.?$/i);
   if (tapClaim) return THERAPY[Object.keys(THERAPY).find((k) => k.toLowerCase() === tapClaim[1].toLowerCase())];
   if (/^Hi Zoey! We'd like to claim our \$\d+ off HBOT for two/.test(t)) return "duo";

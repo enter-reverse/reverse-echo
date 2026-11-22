@@ -266,34 +266,32 @@ const alertsOn = { alerts: { conversation: 410, account: "197246" } };
 const waitingConv = (id, name, ago, inbox = INBOX.waCx, extra = {}) => conv(id, inbox, name, { last_activity_at: NOW - ago, first_reply_created_at: NOW - 9000, ...extra });
 const answered = (ago) => [msg(1, 0, "hi", ago + 600), msg(2, 1, "Hi! How can I help?", ago + 500)];
 
-test("the owner is pinged once at 10 and once at 20 minutes for a customer still waiting", async () => {
+test("the owner is pinged once, at 20 minutes, for a customer still waiting (no 10-minute ping since 22 Nov)", async () => {
   const thread = (ago) => ({ 7: [...answered(ago), msg(3, 0, "is parking free?\nthanks", ago)] });
-  let f = fake({ open: [waitingConv(7, "Jo Tan", 10 * M + 20)], threads: thread(10 * M + 20) });
+  let f = fake({ open: [waitingConv(7, "Jo Tan", 20 * M + 20)], threads: thread(20 * M + 20) });
   const s = await go(f, alertsOn);
   assert.equal(f.sent.length, 1);
   assert.equal(f.sent[0].cid, 410);
-  assert.ok(f.sent[0].content.startsWith("Unanswered 10 min\n\nJo Tan on WhatsApp, since "));
+  assert.ok(f.sent[0].content.startsWith("Unanswered 20 min\n\nJo Tan on WhatsApp, since "));
   assert.ok(f.sent[0].content.includes('"is parking free? thanks"'));
   assert.ok(f.sent[0].content.endsWith("https://app.chatwoot.com/app/accounts/197246/conversations/7"));
   assert.equal(s.alertsSent, 1);
-  for (const ago of [9 * M + 30, 11 * M + 5, 15 * M, 19 * M + 59, 21 * M + 1]) {
+  for (const ago of [9 * M + 30, 10 * M + 20, 11 * M + 5, 15 * M, 19 * M + 59, 21 * M + 1]) {
     f = fake({ open: [waitingConv(7, "Jo", ago)], threads: thread(ago) });
-    await go(f, alertsOn); assert.deepEqual(f.sent, [], `${ago}s old: between marks`);
+    await go(f, alertsOn); assert.deepEqual(f.sent, [], `${ago}s old: not the 20-minute mark`);
   }
-  f = fake({ open: [waitingConv(7, "Jo", 20 * M + 30)], threads: thread(20 * M + 30) });
-  await go(f, alertsOn); assert.ok(f.sent[0].content.startsWith("Unanswered 20 min"));
 });
 
 test("no ping once we've replied, for team chats, the store's WhatsApp, the alert chat itself, when off or in dry run", async () => {
   const waiting = (ago) => [...answered(ago), msg(3, 0, "hello?", ago)];
-  let f = fake({ open: [waitingConv(7, "Jo", 10 * M + 20)], threads: { 7: [...waiting(10 * M + 20), msg(4, 1, "Yes it is!", 60)] } });
+  let f = fake({ open: [waitingConv(7, "Jo", 20 * M + 20)], threads: { 7: [...waiting(20 * M + 20), msg(4, 1, "Yes it is!", 60)] } });
   await go(f, alertsOn); assert.deepEqual(f.sent, [], "replied");
   f = fake({
-    open: [waitingConv(158, "Andre", 10 * M + 20), waitingConv(410, "Elijah", 10 * M + 20), waitingConv(9, "Walk-in", 10 * M + 20, INBOX.waJooChiat)],
-    threads: { 158: waiting(10 * M + 20), 410: waiting(10 * M + 20), 9: waiting(10 * M + 20) },
+    open: [waitingConv(158, "Andre", 20 * M + 20), waitingConv(410, "Elijah", 20 * M + 20), waitingConv(9, "Walk-in", 20 * M + 20, INBOX.waJooChiat)],
+    threads: { 158: waiting(20 * M + 20), 410: waiting(20 * M + 20), 9: waiting(20 * M + 20) },
   });
   await go(f, alertsOn); assert.deepEqual(f.sent, []);
-  f = fake({ open: [waitingConv(7, "Jo", 10 * M + 20)], threads: { 7: waiting(10 * M + 20) } });
+  f = fake({ open: [waitingConv(7, "Jo", 20 * M + 20)], threads: { 7: waiting(20 * M + 20) } });
   await go(f); assert.deepEqual(f.sent, [], "alerts off");
   await go(f, { ...alertsOn, dryRun: true }); assert.deepEqual(f.sent, [], "dry run");
 });
@@ -310,7 +308,7 @@ test("a TRIAL or claim message nobody auto-answered raises the 5-minute alarm; a
   await go(ok, alertsOn);
   assert.deepEqual(ok.sent.map((x) => x.cid), [6]);
 
-  const shut = fake({ open: [waitingConv(7, "Jo", 10 * M + 20)], threads: { 7: [...answered(10 * M + 20), msg(3, 0, "hello?", 10 * M + 20)] } });
+  const shut = fake({ open: [waitingConv(7, "Jo", 20 * M + 20)], threads: { 7: [...answered(20 * M + 20), msg(3, 0, "hello?", 20 * M + 20)] } });
   shut.api.send = async () => { throw new Error("Chatwoot POST /conversations/410/messages -> HTTP 422"); };
   const s = await go(shut, alertsOn);
   assert.equal(s.alertsSent, 0);

@@ -9,7 +9,8 @@ account_id = "7fae655d2b641cfe15a087237ef43b19"
 workers_dev = true
 
 [triggers]
-crons = ["* * * * *"]
+# Every minute: the chat watcher. Every 5 minutes, a second run of its own: the lead forms (src/leads.js).
+crons = ["* * * * *", "*/5 * * * *"]
 
 [vars]
 # "1" = log what would be sent and send nothing. "0" = live.
@@ -42,8 +43,14 @@ REMINDER_CONVERSATIONS = "410,94,433"
 # The day Echo's Instagram token runs out (generated 21 Nov 2026, about 60 days). Reminders start 10 days before.
 # After renewing the token, set this to the new date.
 IG_TOKEN_EXPIRES = "2027-01-20"
-# Meta lead forms copied into Loops ("id:name", comma-separated). Needs the META_PAGE_TOKEN and LOOPS_API_KEY secrets.
+# Meta lead forms ("id:name", comma-separated), read every 5 minutes. Needs the META_PAGE_TOKEN secret (a Page token
+# with leads_retrieval). With LOOPS_API_KEY each lead goes into Loops; with LEAD_TEMPLATE each lead with a phone number
+# gets that WhatsApp template from Zoey's CX number, 9am to 9pm Singapore time, once (the "lead-form" label).
 LEAD_FORMS = "980030121464233:Redlight lead form (H12)"
+# The Meta-approved template's name on the CX number. "" = no WhatsApp. Set it only once Meta shows it as Active.
+LEAD_TEMPLATE = ""
+# What Chatwoot shows for it ({{1}} = their first name; \n = new line). Keep it word for word the approved template.
+LEAD_TEMPLATE_TEXT = "Hi {{1}}! Thanks for checking out Redlight at Reverse. Our bed is full-body: you lie back for 20 minutes in your own private room. Most people come for their skin or for recovery.\n\nWhat are you looking to work on?\n\n- Zoey"
 
 # Secrets (set by the deploy workflow, never committed): CW_TOKEN, CW_ACC, SHOPIFY_WEBHOOK_SECRET
 

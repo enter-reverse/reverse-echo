@@ -75,10 +75,14 @@ jobs:
           else
             echo "::notice::SHOPIFY_WEBHOOK_SECRET is not set, so the Shopify paid-label address will answer 'not configured'."
           fi
-          # Lead forms into Loops: both secrets, or the copy stays off.
-          if [ -n "$META_PAGE_TOKEN" ] && [ -n "$LOOPS_API_KEY" ]; then
+          # Lead forms: META_PAGE_TOKEN reads the leads (without it the lead run does nothing); LOOPS_API_KEY adds Loops.
+          if [ -n "$META_PAGE_TOKEN" ]; then
             printf '%s' "$META_PAGE_TOKEN" | npx --yes wrangler@4 secret put META_PAGE_TOKEN
+          else
+            echo "::notice::META_PAGE_TOKEN is not set, so lead form leads are not read."
+          fi
+          if [ -n "$LOOPS_API_KEY" ]; then
             printf '%s' "$LOOPS_API_KEY" | npx --yes wrangler@4 secret put LOOPS_API_KEY
           else
-            echo "::notice::META_PAGE_TOKEN or LOOPS_API_KEY is not set, so lead form leads are not copied into Loops."
+            echo "::notice::LOOPS_API_KEY is not set, so lead form leads are not copied into Loops."
           fi

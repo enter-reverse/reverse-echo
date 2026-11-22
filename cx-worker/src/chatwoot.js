@@ -38,6 +38,15 @@ export function createChatwoot({ token, account, host = "https://app.chatwoot.co
     async labelled(label, page = 1) {
       return (await call("GET", `/conversations?status=all&assignee_type=all&labels[]=${encodeURIComponent(label)}&page=${page}`)).data?.payload ?? [];
     },
+    /** A new contact in an inbox; returns the contact (with its contact_inboxes). */
+    async createContact(body) {
+      const r = await call("POST", `/contacts`, body);
+      const c = r.payload?.contact ?? r.payload ?? r;
+      if (r.payload?.contact_inbox && !c.contact_inboxes) c.contact_inboxes = [r.payload.contact_inbox];
+      return c;
+    },
+    /** A new conversation for a contact in an inbox; returns it (with its id). */
+    createConversation: (body) => call("POST", `/conversations`, { status: "open", ...body }),
     /** The latest public messages of a conversation, oldest first: 0 = from the customer, 1 = from us. */
     async messages(cid) {
       return publicOnly((await call("GET", `/conversations/${cid}/messages`)).payload).sort((a, b) => a.created_at - b.created_at);

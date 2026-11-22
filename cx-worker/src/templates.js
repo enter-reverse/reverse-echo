@@ -126,6 +126,6 @@ export const TEMPLATES = {
   day5: {
     name: "claim_followup_day5",
     label: "fu5",
-    text: (n) => `Hi ${n}, last note from me about your $100 off, so I don't fill up your chat :)\n\nIt's still saved if you want it. Reply here any time and I'll send your link or answer anything.`,
+    text: (n) => `Hi ${n}, last note from me about your $100 off, so I don't fill up your chat :)\n\nIt's still saved if you want it. Reply here any time and I'll send your link or answer any questions.`,
   },
 };

@@ -2,12 +2,13 @@
 // with the new total and what we can trace of that buyer's journey. It runs off Shopify's "order paid"
 // notification, so there is nothing to poll and no AI turn involved.
 //
-// What counts: the monthly pass (Shopify sku 100116): All-Access +1, Duo (quantity 2) +2. Red Light monthly
-// ("8 RLT/mth") adds nothing: only the one Darren sold is in the starting total. Team tests ($0/$1 orders,
+// What counts: the monthly pass (Shopify sku 100116): All-Access +1, Duo (quantity 2) +2, and Red Light monthly
+// ("8 RLT/mth", the same recurring pass under another name: the user, 22 Nov 2026) +1. Team tests ($0/$1 orders,
 // "TEST" titles, @enterreverse.com emails) add nothing. Monthly renewals of an existing pass add nothing either.
 //
 // No database: the running total is read back from the last "Total: N" this Worker (or the CX chat) sent
-// the user, falling back to PASS_BASE_TOTAL (61, confirmed by the user on 22 Nov 2026 01:38 SGT).
+// the user, falling back to PASS_BASE_TOTAL (61, confirmed by the user on 22 Nov 2026 01:38 SGT; it was 2 short:
+// both Red Light passes, #2613 and #2619, count, so the right total after #2635 is 65).
 // Studio sales rung up in Mindbody never reach Shopify, so they are not seen here; the CX chat adds those.
 
 import { buyerKeys } from "./shopify.js";
@@ -30,7 +31,7 @@ export function passDelta(order) {
   const tags = String(order.tags ?? "");
   if (/subscription/i.test(tags) && !/first order/i.test(tags)) return { kind: "renewal", n: 0 };
   if (Number(line.quantity ?? 1) >= 2) return { kind: "Duo", n: 2 };
-  if (/RLT/i.test(title)) return { kind: "Red Light", n: 0 };
+  if (/RLT/i.test(title)) return { kind: "Red Light", n: 1 };
   return { kind: "All-Access", n: 1 };
 }
 

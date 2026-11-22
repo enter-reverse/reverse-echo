@@ -4,8 +4,9 @@
 
 // Chatwoot inbox ids.
 export const INBOX = { instagram: 156618, waJooChiat: 157353, waCx: 156990, messenger: 156616, email: 156786, web: 156615 };
-// Website claims arrive through the site's WhatsApp button.
-const CLAIM_INBOXES = new Set([INBOX.waCx, INBOX.waJooChiat]);
+// Website claims arrive through the site's WhatsApp button; since 22 Nov 2026 the same claim text also starts
+// Instagram DMs from ads that open a chat (the user: "fix for instagram too"). Follow-ups stay WhatsApp-only here.
+const CLAIM_INBOXES = new Set([INBOX.waCx, INBOX.waJooChiat, INBOX.instagram]);
 
 const TAIL =
   "- $199 for your first month, then $299 a month\n" +

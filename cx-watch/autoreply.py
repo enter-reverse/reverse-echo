@@ -64,7 +64,12 @@ def tpl(kind, name):
 def kind_of(text, inbox):
     t = (text or "").strip()
     if re.fullmatch(r"[\W_]*trial[\W_]*", t, re.I): return "trial"
-    if inbox not in (156990, 157353): return None  # claims come from the site's WhatsApp button
+    # Same inboxes and taps as Cloudflare's kindOf (cx-worker templates.js, PRs #29-#33): Instagram's chat-ad taps
+    # are Cloudflare's to answer, so the watcher must skip them too, or a lead gets two replies (the user, 22 Nov 6:11pm).
+    if inbox not in (156990, 157353, 156618): return None
+    if re.match(r"^(Hi Reverse Team!? )?I['’]d like to (find out|know) more about the red ?light experience( at Reverse)?!?$", t, re.I): return "red_info"
+    tap = re.match(r"^Hi Reverse Team!? I['’]d like to claim my \$\d+ off (HBOT|Red ?Light|Contrast|Dry Float)\.?$", t, re.I)
+    if tap: return {"hbot": "hbot", "redlight": "red", "contrast": "contrast", "dryfloat": "float"}[tap.group(1).replace(" ", "").lower()]
     if re.match(r"^Hi Zoey! We'd like to claim our \$\d+ off HBOT for two", t): return "duo"
     m = re.match(r"^Hi Zoey! I'd like to claim my \$\d+ off (HBOT|Red Light|Contrast|Dry Float), \$\d+ for my first month\.", t)
     return {"HBOT": "hbot", "Red Light": "red", "Contrast": "contrast", "Dry Float": "float"}[m.group(1)] if m else None
@@ -108,3 +113,19 @@ def maybe_reply(cid, inbox, name, msg, msgs):
     line = f"AUTO-SENT {k} reply to {cid} {name} (msg {mid}, status {status})"
     open(LOG, "a").write(time.strftime("%d %b %H:%M ") + line + "\n")
     return line
+
+
+def cloudflares(msg, msgs, inbox):
+    """Whether Cloudflare answers this message, as its tick() decides (cx-worker cx.js), so the watcher leaves it
+    alone; else it is Claude's. 'repeat' = an ad tap re-sent after its reply: nobody needs to answer.
+    (The user, 22 Nov 6:23pm: simulate so there are no gaps. A TRIAL typed after the ad reply went unanswered.)"""
+    k = kind_of(msg.get("content"), inbox)
+    if not k: return False
+    before = [x for x in msgs if x["created_at"] < msg["created_at"] or (x["created_at"] == msg["created_at"] and x["id"] < msg["id"])]
+    if not any(x["message_type"] == 1 for x in before): return True  # a new chat: Cloudflare answers the first match
+    tap = inbox == 156618 and (msg.get("content") or "").strip().lower().startswith("hi reverse team")
+    if not tap: return False  # e.g. TRIAL typed mid-chat: Cloudflare stays out, so Claude answers
+    opener = "Hey! I'm Zoey from Reverse. Our Redlight bed" if k == "red_info" else "Hi, you're in!"  # Cloudflare's nameless Instagram openers
+    if any(x["message_type"] == 1 and (x.get("content") or "").startswith(opener) for x in before): return "repeat"
+    return True
+

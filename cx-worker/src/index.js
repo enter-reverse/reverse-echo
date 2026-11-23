@@ -12,11 +12,10 @@ export const convList = (v) => String(v ?? "").split(",").map((x) => Number(x.tr
 
 export const LEAD_CRON = "*/5 * * * *";
 
-/** Meta lead form leads: into Loops, and a welcome WhatsApp (off until LEAD_FORMS and META_PAGE_TOKEN are set; the WhatsApp also needs LEAD_TEMPLATE). */
+/** Meta lead form leads into Loops (off until LEAD_FORMS, META_PAGE_TOKEN and LOOPS_API_KEY are set). No WhatsApp. */
 export async function runLeads(env, now, { fetchImpl = fetch, log = console.log } = {}) {
   if (!env.LEAD_FORMS) return null;
-  const api = createChatwoot({ token: env.CW_TOKEN, account: env.CW_ACC, fetchImpl });
-  const l = await syncLeads({ env, now, api, fetchImpl, log, dryRun: !(env.DRY_RUN === "0" || env.DRY_RUN === "false") });
+  const l = await syncLeads({ env, now, fetchImpl, log, dryRun: !(env.DRY_RUN === "0" || env.DRY_RUN === "false") });
   log(JSON.stringify({ leadForms: l })); // every run, so the log shows the lead run is alive and how many it saw
   return l;
 }

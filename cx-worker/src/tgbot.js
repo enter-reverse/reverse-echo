@@ -27,7 +27,9 @@ Answer only from the CONTEXT: the CX facts and the Academy pages. Never guess or
 - When you use an Academy page, end with one line: (from: <page title>). If you used the CX facts, write (from: CX playbook).
 - If they ask you to book, cancel or reschedule a client, or ask about free slots or availability, reply with exactly the word HANDOFF and nothing else.
 - If they ask you to draft a message to a customer, write it in the customer-facing rules from the CX facts.
-- Style: short, plain, friendly, like a helpful colleague on Telegram. Lists only for steps. No sign-off, no "Any other questions" line, no filler openers.`;
+- Style: short, plain, friendly, like a helpful colleague on Telegram. Lists only for steps. No sign-off, no "Any other questions" line, no filler openers.
+- WHO IS ASKING is given below. If it starts with "unknown": everyone must introduce themselves first (Elijah, 25 Nov). If the new message gives their name and role, reply with exactly one line "INTRO: <name> | <role>" and nothing else. Otherwise reply asking for their name and role at Reverse before you help, unless it's an urgent safety question, which you answer first and then ask.
+- If WHO IS ASKING is (or has the Telegram name) Darren Tay: answer in a theatrical, smug, long-winded voice (you were created by Jeff, not Darren), playful and never insulting. Facts and rules are unchanged.`;
 
 /** Is this webhook worth looking at? Only a new incoming message in the Telegram inbox. */
 export function wanted(body) {
@@ -81,16 +83,29 @@ export async function answer({ api, env, cid, fetchImpl = fetch, log = console.l
   if (!ask.length) return { cid, skipped: "already answered" };
   const question = ask.map((m) => m.content.trim()).filter((t) => t !== "/start").join("\n");
   if (!question) {
-    const hello = "Hi! I'm Zoey, Reverse's helper. Ask me about SOPs, room resets, running sessions, prices and passes, free slots, or what to reply to a customer.";
+    const hello = "Hi! I'm Zoey, Reverse's helper. Ask me about SOPs, room resets, running sessions, prices and passes, free slots, or what to reply to a customer.\n\nFirst, what's your name and role at Reverse (e.g. \"Sarah, part-time SES\")? It helps the team know who's asking.";
     if (!dryRun) await api.send(cid, hello);
     return { cid, sent: "hello" };
   }
+  const contact = conv?.meta?.sender ?? {};
+  const who = contact.custom_attributes?.staff_name
+    ? `${contact.custom_attributes.staff_name}${contact.custom_attributes.staff_role ? " (" + contact.custom_attributes.staff_role + ")" : ""}`
+    : `unknown (Telegram name: ${contact.name ?? "?"})`;
   const recent = ms.slice(-10).map((m) => `${m.message_type === 0 ? "Staff" : "Zoey"}: ${String(m.content ?? "").slice(0, 600)}`).join("\n");
   const ctx = await context(env, question, fetchImpl);
   const pages = (ctx.chunks ?? []).map((c) => `[${c.title}${c.heading ? " / " + c.heading : ""}]\n${c.text}`).join("\n\n");
-  const user = `CONTEXT\n\n=== CX facts ===\n${ctx.playbook ?? "(none)"}\n\n=== Academy pages (published) ===\n${pages || "(no matching pages)"}\n\nCONVERSATION SO FAR\n${recent}\n\nNEW MESSAGE FROM STAFF\n${question}`;
+  const user = `CONTEXT\n\n=== CX facts ===\n${ctx.playbook ?? "(none)"}\n\n=== Academy pages (published) ===\n${pages || "(no matching pages)"}\n\nCONVERSATION SO FAR\n${recent}\n\nWHO IS ASKING\n${who}\n\nNEW MESSAGE FROM STAFF\n${question}`;
   let reply = await claude(env, SYSTEM, user, fetchImpl);
   if (!reply) reply = NOT_COVERED;
+  const intro = reply.match(/^INTRO:\s*(.+?)\s*\|\s*(.+)$/i);
+  if (intro && contact.id) {
+    const [, name, role] = intro;
+    if (!dryRun) {
+      await api.updateContact(contact.id, { name: `${name} (${role})`, custom_attributes: { ...(contact.custom_attributes ?? {}), staff_name: name, staff_role: role } });
+      await api.send(cid, `Thanks ${name}! What can I help you with?`);
+    }
+    return { cid, intro: name };
+  }
   if (/^HANDOFF\b/i.test(reply)) {
     // Bookings need a person's yes in Elijah's Claude chat; that session picks this up within a minute.
     if (!dryRun) await api.send(cid, `${STANDBY}, I'm checking that for you 🙏`);

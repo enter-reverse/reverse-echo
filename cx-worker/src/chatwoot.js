@@ -65,6 +65,8 @@ export function createChatwoot({ token, account, host = "https://app.chatwoot.co
     },
     /** One conversation (its inbox, status and Telegram chat id). */
     conversation: (cid) => call("GET", `/conversations/${cid}`),
+    /** Updates a contact (the Telegram bot stores staff names there). */
+    updateContact: (id, body) => call("PUT", `/contacts/${id}`, body),
     send: (cid, content) => call("POST", `/conversations/${cid}/messages`, { content, message_type: "outgoing", private: false }),
     /** A private note: seen by the team in Chatwoot, never sent to the customer. */
     note: (cid, content) => call("POST", `/conversations/${cid}/messages`, { content, message_type: "outgoing", private: true }),

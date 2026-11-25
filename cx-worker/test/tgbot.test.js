@@ -7,13 +7,16 @@ const env = { ANTHROPIC_API_KEY: "k", ZOEY_BOT_KEY: "z", SUPABASE_URL: "https://
 
 function fakeApi({ inbox = TG_INBOX, chatId = 313483437, messages }) {
   const sent = [], notes = [];
-  return {
+  const api = {
     sent, notes,
-    conversation: async () => ({ inbox_id: inbox, additional_attributes: { chat_id: chatId } }),
+    conversation: async () => ({ inbox_id: inbox, additional_attributes: { chat_id: chatId }, meta: { sender: { id: 99, name: "kris", custom_attributes: {} } } }),
+    updated: [],
+    updateContact: async (id, body) => { api.updated.push({ id, body }); },
     messages: async () => messages,
     send: async (cid, content) => sent.push(content),
     note: async (cid, content) => notes.push(content),
   };
+  return api;
 }
 
 function fakeFetch(reply) {
@@ -95,4 +98,21 @@ test("the /tg-bot address ignores non-Telegram events and never touches /shopify
   const req = new Request("https://x.test/tg-bot", { method: "POST", body: JSON.stringify({ event: "message_created", message_type: "outgoing" }) });
   const res = await worker.fetch(req, { CW_TOKEN: "t", CW_ACC: "1" }, { waitUntil() {} });
   assert.equal(await res.text(), "ignored");
+});
+
+test("a newcomer's introduction is saved as their Chatwoot name", async () => {
+  const api = fakeApi({ messages: [{ message_type: 0, created_at: 1, content: "I'm Kris, part-time SES" }] });
+  const r = await answer({ api, env, cid: 7, fetchImpl: fakeFetch("INTRO: Kris | part-time SES"), log: () => {} });
+  assert.equal(r.intro, "Kris");
+  assert.equal(api.updated[0].body.name, "Kris (part-time SES)");
+  assert.equal(api.updated[0].body.custom_attributes.staff_name, "Kris");
+  assert.match(api.sent[0], /Thanks Kris/);
+});
+
+test("the prompt says who is asking, or that they are unknown", async () => {
+  const api = fakeApi({ messages: [{ message_type: 0, created_at: 1, content: "prices?" }] });
+  const f = fakeFetch("HBOT $150");
+  await answer({ api, env, cid: 7, fetchImpl: f, log: () => {} });
+  const prompt = f.calls.find((c) => c.url.includes("anthropic")).body.messages[0].content;
+  assert.match(prompt, /WHO IS ASKING\nunknown \(Telegram name: kris\)/);
 });

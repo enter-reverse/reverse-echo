@@ -3,7 +3,7 @@
 // test/golden.json holds that script's own output and the tests compare against it.
 
 // Chatwoot inbox ids.
-export const INBOX = { instagram: 156618, waJooChiat: 157353, waCx: 156990, messenger: 156616, email: 156786, web: 156615 };
+export const INBOX = { instagram: 156618, waJooChiat: 157353, waCx: 156990, messenger: 156616, email: 156786, web: 156615, telegram: 160059 };
 // Website claims arrive through the site's WhatsApp button; since 22 Nov 2026 the same claim text also starts
 // Instagram DMs from ads that open a chat (the user: "fix for instagram too"). Follow-ups stay WhatsApp-only here.
 const CLAIM_INBOXES = new Set([INBOX.waCx, INBOX.waJooChiat, INBOX.instagram]);

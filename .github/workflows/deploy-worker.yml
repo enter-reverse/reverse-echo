@@ -35,6 +35,8 @@ jobs:
       SHOPIFY_WEBHOOK_SECRET: ${{ secrets.SHOPIFY_WEBHOOK_SECRET }}
       META_PAGE_TOKEN: ${{ secrets.META_PAGE_TOKEN }}
       LOOPS_API_KEY: ${{ secrets.LOOPS_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      ZOEY_BOT_KEY: ${{ secrets.ZOEY_BOT_KEY }}
     steps:
       - uses: actions/checkout@v4
       - name: Check the Cloudflare secrets are set
@@ -81,6 +83,14 @@ jobs:
           else
             echo "::notice::META_PAGE_TOKEN is not set, so lead form leads are not read."
           fi
+          # The staff Telegram bot (cx-worker/src/tgbot.js) answers only when both of these exist.
+          for name in ANTHROPIC_API_KEY ZOEY_BOT_KEY; do
+            if [ -n "${!name}" ]; then
+              printf '%s' "${!name}" | npx --yes wrangler@4 secret put "$name"
+            else
+              echo "::notice::$name is not set, so the Telegram bot stays off."
+            fi
+          done
           if [ -n "$LOOPS_API_KEY" ]; then
             printf '%s' "$LOOPS_API_KEY" | npx --yes wrangler@4 secret put LOOPS_API_KEY
           else

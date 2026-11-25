@@ -70,7 +70,7 @@ export async function tick({ api, options = {}, log = console.log }) {
     for (const c of await api.conversations(status)) convs.set(c.id, c);
   }
   for (const [cid, c] of convs) {
-    if (TEAM.has(cid) || c.inbox_id === INBOX.waJooChiat) continue; // the store answers its own WhatsApp
+    if (TEAM.has(cid) || c.inbox_id === INBOX.waJooChiat || c.inbox_id === INBOX.telegram) continue; // the store answers its own WhatsApp
     if ((c.last_activity_at ?? 0) <= now - freshSecs) continue;
     // We've written here before: only an Instagram chat ad's tap is still answered (checked below).
     const returning = Boolean(c.first_reply_created_at);
@@ -129,7 +129,7 @@ export async function tick({ api, options = {}, log = console.log }) {
   // after, if they haven't written more (the user, 22 Nov 6:29pm: "just say it once in the whole chat").
   // WhatsApp, Instagram and Messenger only; never team chats, the store's WhatsApp, email, or an internal chat.
   for (const [cid, c] of thanks ? convs : []) {
-    if (TEAM.has(cid) || c.inbox_id === INBOX.waJooChiat || c.inbox_id === INBOX.email || c.inbox_id === INBOX.web) continue;
+    if (TEAM.has(cid) || c.inbox_id === INBOX.waJooChiat || c.inbox_id === INBOX.telegram || c.inbox_id === INBOX.email || c.inbox_id === INBOX.web) continue;
     if ((c.labels ?? []).includes("internal")) continue;
     if ((c.last_activity_at ?? 0) <= now - 10 * 60) continue;
     if (sends >= maxSends || !room()) { summary.skipped++; continue; }
@@ -269,7 +269,7 @@ export async function tick({ api, options = {}, log = console.log }) {
     const crossed = (m, mins) => m.created_at > now - (mins + 1) * MIN && m.created_at <= now - mins * MIN;
     let looked = 0;
     for (const [cid, c] of convs) {
-      if (TEAM.has(cid) || alertTo.includes(cid) || c.inbox_id === INBOX.waJooChiat) continue;
+      if (TEAM.has(cid) || alertTo.includes(cid) || c.inbox_id === INBOX.waJooChiat || c.inbox_id === INBOX.telegram) continue;
       if ((c.last_activity_at ?? 0) <= now - 22 * MIN) continue; // nothing here can be crossing a mark
       if (c.inbox_id === INBOX.email && EMAIL_NOISE.some((n) => (sender(c).email ?? "").toLowerCase().includes(n))) continue;
       try {

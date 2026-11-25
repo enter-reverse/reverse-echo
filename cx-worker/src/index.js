@@ -6,6 +6,7 @@ import { markPaid, verify } from "./shopify.js";
 import { sendReminders } from "./reminders.js";
 import { countPass } from "./passes.js";
 import { syncLeads } from "./leads.js";
+import { answer as answerTg, wanted as tgWanted } from "./tgbot.js";
 
 /** "410, 94,433" -> [410, 94, 433]; blanks and non-numbers dropped. */
 export const convList = (v) => String(v ?? "").split(",").map((x) => Number(x.trim())).filter((n) => n > 0);
@@ -71,9 +72,22 @@ export default {
       })(),
     );
   },
-  // The only thing served: Shopify's "order paid" notification, at /shopify.
+  // Served: Shopify's "order paid" notification at /shopify, and the Telegram bot webhook at /tg-bot.
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    // The staff Telegram bot: Chatwoot's agent-bot webhook for the Telegram inbox (src/tgbot.js).
+    // The body is only a nudge; answer() re-reads the conversation from Chatwoot with our own token.
+    if (request.method === "POST" && url.pathname === "/tg-bot") {
+      let body = null;
+      try { body = await request.json(); } catch { return new Response("bad body", { status: 400 }); }
+      if (!tgWanted(body)) return new Response("ignored");
+      const api = createChatwoot({ token: env.CW_TOKEN, account: env.CW_ACC });
+      const dryRun = !(env.DRY_RUN === "0" || env.DRY_RUN === "false");
+      ctx.waitUntil(answerTg({ api, env, cid: Number(body.conversation.id), dryRun })
+        .then((r) => console.log(JSON.stringify({ tgBot: r })))
+        .catch((err) => console.error(`Telegram bot failed: ${err.message}`)));
+      return new Response("ok");
+    }
     if (request.method !== "POST" || url.pathname !== "/shopify") {
       return new Response("CX watcher is running.\n", { headers: { "content-type": "text/plain" } });
     }

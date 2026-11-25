@@ -48,7 +48,15 @@ IG_TOKEN_EXPIRES = "2027-01-20"
 # lead-form leads are followed up on Instagram.
 LEAD_FORMS = "980030121464233:Redlight lead form (H12)"
 
-# Secrets (set by the deploy workflow, never committed): CW_TOKEN, CW_ACC, SHOPIFY_WEBHOOK_SECRET
+# The staff Telegram bot (src/tgbot.js): Chatwoot posts each new Telegram message to /tg-bot and the worker
+# answers in seconds from the CX playbook and the Reverse Academy. Off until the ANTHROPIC_API_KEY and ZOEY_BOT_KEY
+# secrets exist. The Supabase address and publishable key are public by design; the Academy is read through
+# public.zoey_bot_context, which refuses anyone without ZOEY_BOT_KEY.
+SUPABASE_URL = "https://ffdrnnfsgwejwliberqf.supabase.co"
+SUPABASE_PUBLISHABLE_KEY = "sb_publishable_NFRMfqNfeqBeNGlAUB61SA_yjBa9l8b"
+TG_BOT_MODEL = "claude-sonnet-5-5"
+
+# Secrets (set by the deploy workflow, never committed): CW_TOKEN, CW_ACC, SHOPIFY_WEBHOOK_SECRET, ANTHROPIC_API_KEY, ZOEY_BOT_KEY
 
 # Keep each run's log lines in the Cloudflare dashboard (Workers > this Worker > Logs).
 [observability]

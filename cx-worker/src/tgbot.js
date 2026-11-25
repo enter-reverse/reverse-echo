@@ -67,7 +67,12 @@ async function claude(env, system, user, fetchImpl) {
     headers: { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
     body: JSON.stringify({ model: env.TG_BOT_MODEL || MODEL, max_tokens: 900, system, messages: [{ role: "user", content: user }] }),
   });
-  if (!res.ok) throw new Error(`Claude -> HTTP ${res.status}`);
+  if (!res.ok) {
+    // Anthropic's error message says what was wrong (model, credit, request); it never contains the key.
+    let why = "";
+    try { why = (await res.json())?.error?.message ?? ""; } catch {}
+    throw new Error(`Claude -> HTTP ${res.status}${why ? ": " + why.slice(0, 200) : ""}`);
+  }
   const j = await res.json();
   return (j.content ?? []).filter((b) => b.type === "text").map((b) => b.text).join("").trim();
 }

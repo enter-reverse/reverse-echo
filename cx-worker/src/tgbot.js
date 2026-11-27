@@ -17,6 +17,21 @@ export const STANDBY = "Got it! Give me a minute";
 export const NOT_COVERED = "This isn't covered yet, please check with the full-timers.";
 const MODEL = "claude-sonnet-5-5";
 
+// The HQ team: the founders, Wendy and Shah (Elijah, 27 Nov 2026). Only they may use the bot's slash commands
+// (/update and the rest); anyone else who sends one gets NOT_FOR_YOU and the command goes nowhere. /start stays
+// open to everyone. Keyed by Telegram chat id, which a person can't change (a private chat's id is their user id).
+export const HQ = new Map([
+  [313483437, "Elijah"], [531673911, "Andre"], [299024597, "Gordon"], [220487613, "Darren"], [259169594, "Xinyuan"],
+  [1200464601, "Wendy"], [823909446, "Shah"],
+]);
+export const NOT_FOR_YOU = "Sorry, this isn't available to you.";
+// Commands every staff member may use (Elijah, 27 Nov: "/shiftbrief for now, just to get an update on their shift").
+// /shiftbrief is written by Elijah's Claude session, which reads this inbox every minute: we only send the standby line.
+export const STAFF_COMMANDS = new Set(["start", "shiftbrief"]);
+const HANDED_OFF = new Set(["shiftbrief"]);
+/** The command a message starts with ("/shiftbrief@ReverseZoeyBot please" -> "shiftbrief"), or null. */
+export const commandOf = (t) => (String(t ?? "").trim().match(/^\/([a-z0-9_]+)(@\w+)?(\s|$)/i) ?? [])[1]?.toLowerCase() ?? null;
+
 const SYSTEM = `You are Zoey, the helper bot for the staff of Reverse, a private recovery studio in Singapore (HBOT, Contrast, Red Light, Dry Float). You are chatting on Telegram with a staff member (usually a part-timer), never with a customer.
 
 Answer only from the CONTEXT: the CX facts and the Academy pages. Never guess or add facts that aren't there.
@@ -86,6 +101,17 @@ export async function answer({ api, env, cid, fetchImpl = fetch, log = console.l
   const ms = await api.messages(cid);
   const ask = pending(ms);
   if (!ask.length) return { cid, skipped: "already answered" };
+  const cmds = ask.map((m) => commandOf(m.content)).filter(Boolean);
+  if (cmds.some((c) => !STAFF_COMMANDS.has(c)) && !HQ.has(Number(conv?.additional_attributes?.chat_id))) {
+    if (!dryRun) await api.send(cid, NOT_FOR_YOU);
+    log(JSON.stringify({ tgBot: { cid, refused: "command, not HQ" } }));
+    return { cid, refused: true };
+  }
+  if (cmds.some((c) => HANDED_OFF.has(c))) {
+    if (!dryRun) await api.send(cid, `${STANDBY}, pulling up your shift 🙏`);
+    log(JSON.stringify({ tgBot: { cid, handoff: true, command: cmds.find((c) => HANDED_OFF.has(c)) } }));
+    return { cid, handoff: true };
+  }
   const question = ask.map((m) => m.content.trim()).filter((t) => t !== "/start").join("\n");
   if (!question) {
     const hello = "Hi! I'm Zoey, Reverse's helper. Ask me about SOPs, room resets, running sessions, prices and passes, free slots, or what to reply to a customer.\n\nFirst, what's your name and role at Reverse (e.g. \"Sarah, part-time SES\")? It helps the team know who's asking.";

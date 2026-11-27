@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { answer, pending, wanted, STANDBY, NOT_COVERED, NOT_FOR_YOU, TG_INBOX } from "../src/tgbot.js";
+import { answer, pending, wanted, STANDBY, NOT_COVERED, NOT_FOR_YOU, TG_INBOX, commandOf } from "../src/tgbot.js";
 import worker from "../src/index.js";
 
 const env = { ANTHROPIC_API_KEY: "k", ZOEY_BOT_KEY: "z", SUPABASE_URL: "https://sb.test", SUPABASE_PUBLISHABLE_KEY: "pk" };
@@ -141,4 +141,18 @@ test("HQ (founders, Wendy, Shah) can use commands; /start and plain questions st
   const q = fakeApi({ chatId: 769515809, messages: [{ message_type: 0, created_at: 1, content: "how to reset dry float / red light room" }] });
   await answer({ api: q, env, cid: 7, fetchImpl: fakeFetch("Wipe the bed"), log: () => {} });
   assert.equal(q.sent[0], "Wipe the bed");
+});
+
+test("/shiftbrief is open to all staff and handed to Elijah's Claude with a standby line", async () => {
+  for (const chatId of [769515809, 313483437]) {
+    const api = fakeApi({ chatId, messages: [{ message_type: 0, created_at: 1, content: "/shiftbrief" }] });
+    const f = fakeFetch("should not be called");
+    const r = await answer({ api, env, cid: 7, fetchImpl: f, log: () => {} });
+    assert.equal(r.handoff, true);
+    assert.ok(api.sent[0].startsWith(STANDBY));
+    assert.equal(f.calls.length, 0);
+  }
+  assert.equal(commandOf("/shiftbrief@ReverseZoeyBot"), "shiftbrief");
+  assert.equal(commandOf("/Update please"), "update");
+  assert.equal(commandOf("how do I reset dry float / red light"), null);
 });

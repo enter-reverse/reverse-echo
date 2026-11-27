@@ -25,7 +25,12 @@ export const HQ = new Map([
   [1200464601, "Wendy"], [823909446, "Shah"],
 ]);
 export const NOT_FOR_YOU = "Sorry, this isn't available to you.";
-const isCommand = (t) => /^\/[a-z]/i.test(String(t ?? "").trim()) && !/^\/start(@\w+)?\s*$/i.test(String(t ?? "").trim());
+// Commands every staff member may use (Elijah, 27 Nov: "/shiftbrief for now, just to get an update on their shift").
+// /shiftbrief is written by Elijah's Claude session, which reads this inbox every minute: we only send the standby line.
+export const STAFF_COMMANDS = new Set(["start", "shiftbrief"]);
+const HANDED_OFF = new Set(["shiftbrief"]);
+/** The command a message starts with ("/shiftbrief@ReverseZoeyBot please" -> "shiftbrief"), or null. */
+export const commandOf = (t) => (String(t ?? "").trim().match(/^\/([a-z0-9_]+)(@\w+)?(\s|$)/i) ?? [])[1]?.toLowerCase() ?? null;
 
 const SYSTEM = `You are Zoey, the helper bot for the staff of Reverse, a private recovery studio in Singapore (HBOT, Contrast, Red Light, Dry Float). You are chatting on Telegram with a staff member (usually a part-timer), never with a customer.
 
@@ -96,10 +101,16 @@ export async function answer({ api, env, cid, fetchImpl = fetch, log = console.l
   const ms = await api.messages(cid);
   const ask = pending(ms);
   if (!ask.length) return { cid, skipped: "already answered" };
-  if (ask.some((m) => isCommand(m.content)) && !HQ.has(Number(conv?.additional_attributes?.chat_id))) {
+  const cmds = ask.map((m) => commandOf(m.content)).filter(Boolean);
+  if (cmds.some((c) => !STAFF_COMMANDS.has(c)) && !HQ.has(Number(conv?.additional_attributes?.chat_id))) {
     if (!dryRun) await api.send(cid, NOT_FOR_YOU);
     log(JSON.stringify({ tgBot: { cid, refused: "command, not HQ" } }));
     return { cid, refused: true };
+  }
+  if (cmds.some((c) => HANDED_OFF.has(c))) {
+    if (!dryRun) await api.send(cid, `${STANDBY}, pulling up your shift 🙏`);
+    log(JSON.stringify({ tgBot: { cid, handoff: true, command: cmds.find((c) => HANDED_OFF.has(c)) } }));
+    return { cid, handoff: true };
   }
   const question = ask.map((m) => m.content.trim()).filter((t) => t !== "/start").join("\n");
   if (!question) {
